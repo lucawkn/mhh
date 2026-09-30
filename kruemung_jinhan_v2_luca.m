@@ -2,7 +2,11 @@
 % Krümmung eines DRAHTS aus einem .avi-Video bestimmen (SAM-2-Segmentierung).
 % 1. Ein .avi-Video auswählen (mit Default-Pfad)
 % 2. Pro Frame die vorberechnete SAM-2-Maske laden, skelettieren und die
-%    Krümmung entlang der Mittellinie berechnen
+%    Krümmung entlang der Mittellinie berechnen:
+%    ALLE Skelettpixel (nach Bogenlänge sortiert) werden mit einer kubischen
+%    Least-Squares-Spline approximiert (Abstand Punkte <-> Spline minimal),
+%    die Krümmung wird dann ANALYTISCH aus den Spline-Ableitungen berechnet
+%    (kein Rauschen durch numerisches Differenzieren der Pixelpunkte).
 % 3. Mittlere Krümmung über die Zeit plotten
 % 4. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 %
@@ -17,6 +21,12 @@
 clear; clc; close all;
 
 max_kappa = 0.0090;
+
+% --- Parameter Spline-Fit ---
+knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
+nParamIter  = 3;     % Fußpunkt-Iterationen (0 = Punkte nur über Bogenlänge zuordnen,
+                     % >0 = echter orthogonaler Abstand Punkt <-> Spline wird minimiert)
+Neval       = 200;   % Auswertepunkte entlang der Spline (Darstellung + mittlere Krümmung)
 
 %% 1. Video auswählen (mit Default-Pfad)
 defaultPath = 'M:\nascas2\Projects\MemoryCI 2.0\1 Dokumentation\AP04_Aktivierungsparameter\3. Kurzimpulsaktivierung\Aktivierungsprogramm_v5\Testergebnisse';
@@ -92,12 +102,12 @@ for n = 1:ImageNummax
     gapCloseRadius = 1;
     tubeFG_closed = imclose(tubeFG, strel('disk', gapCloseRadius));
 
-    N = 10;                               % gewünschte Punktzahl entlang des Schlauchs
     % Default-Werte, falls der Frame unbrauchbar ist (z.B. zerrissenes Skelett)
-    xs    = nan(1, N);
-    ys    = nan(1, N);
-    kappa = nan(1, N);
-    skel  = false(size(tubeFG_closed));
+    xs     = nan(1, Neval);
+    ys     = nan(1, Neval);
+    kappa  = nan(1, Neval);
+    fitRMS = NaN;
+    skel   = false(size(tubeFG_closed));
 
     % Die am stärksten langgestreckte Komponente als Schlauch wählen
     % -> größte Hauptachsenlänge (MajorAxisLength) statt größter Fläche.
@@ -129,28 +139,19 @@ for n = 1:ImageNummax
             yy = yy(valid);
 
             % unique sortiert aufsteigend UND entfernt doppelte Distanzen
-            % (interp1 braucht streng monotone Stützstellen)
             [d, iu] = unique(d);
             xx = xx(iu);
             yy = yy(iu);
 
-            if numel(d) >= 2
-                s = linspace(0, d(end), N);    % gleiche Abstände
-                xs = interp1(d, xx, s);
-                ys = interp1(d, yy, s);
+            if numel(d) >= 4
+                % Least-Squares-Spline durch alle Skelettpixel (Parameter = Bogenlänge)
+                [ppx, ppy, fitRMS] = fitSplineLSQ(d, xx, yy, knotSpacing, nParamIter);
 
-                xs = smoothdata(xs, 'gaussian', 2);
-                ys = smoothdata(ys, 'gaussian', 2);
-
-                dx  = gradient(xs);
-                dy  = gradient(ys);
-                ddx = gradient(dx);
-                ddy = gradient(dy);
-
-                kappa = (dx.*ddy - dy.*ddx) ./ (dx.^2 + dy.^2).^(1.5);
-                kappa = abs(kappa);
+                % Spline fein und gleichmäßig auswerten, Krümmung analytisch
+                s = linspace(ppx.breaks(1), ppx.breaks(end), Neval);
+                [xs, ys, kappa] = splineCurvature(ppx, ppy, s);
             else
-                warning('Frame %d: zu wenige Skelettpunkte (<2) - wird mit NaN gefüllt.', n);
+                warning('Frame %d: zu wenige Skelettpunkte (<4) - wird mit NaN gefüllt.', n);
             end
         else
             warning('Frame %d: kein verwertbares Skelett - wird mit NaN gefüllt.', n);
@@ -168,6 +169,7 @@ for n = 1:ImageNummax
     ImageData(n).ys = ys;
     ImageData(n).kappa = kappa;
     ImageData(n).mean_kappa = mean(kappa, 'omitnan');
+    ImageData(n).fitRMS = fitRMS;         % RMS-Abstand Skelettpixel <-> Spline [px]
     ImageData(n).path = videoFullPath;
 
 end
@@ -183,6 +185,8 @@ title('Mittlere Krümmung über die Zeit');
 fprintf('max_kappa normiert = %.4f\n', max(mean_kappa_vec));
 fprintf('max_kappa nicht normiert = %.4f\n', max([ImageData.mean_kappa].'));
 fprintf('end_kappa normiert = %.4f\n', mean_kappa_vec(end));
+fprintf('Spline-Fit: mittlerer RMS-Abstand = %.2f px (max %.2f px)\n', ...
+    mean([ImageData.fitRMS], 'omitnan'), max([ImageData.fitRMS]));
 
 
 %% 5. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
@@ -190,6 +194,10 @@ cmap = jet(256);
 allKappa = [ImageData.kappa];
 kMin = min(allKappa);            % min/max ignorieren NaN automatisch
 kMax = max(allKappa);
+if isempty(kMin) || ~isfinite(kMin) || ~(kMax > kMin)   % z.B. alle Frames NaN
+    kMin = 0;
+    kMax = max([kMax, 1e-6], [], 'omitnan');
+end
 
 hFig = figure('Name', 'Krümmungsdarstellung', 'NumberTitle', 'off');
 hAx  = axes('Parent', hFig, 'Position', [0.05 0.15 0.9 0.80]);
@@ -221,21 +229,75 @@ function drawFrame(hAx, ImageData, n, cmap, kMin, kMax)
     imshow(ImageData(n).rgb, 'Parent', hAx);
     hold(hAx, 'on');
 
-    kValues = ImageData(n).kappa;
-    xs = ImageData(n).xs;
-    ys = ImageData(n).ys;
+    % Spline als eine Linie mit Farbverlauf nach Krümmung (patch-Trick:
+    % NaN am Ende verhindert das Schließen der Fläche)
+    patch(hAx, [ImageData(n).xs NaN], [ImageData(n).ys NaN], [ImageData(n).kappa NaN], ...
+        'EdgeColor', 'interp', 'FaceColor', 'none', 'LineWidth', 3);
+    colormap(hAx, cmap);
+    set(hAx, 'CLim', [kMin kMax]);
 
-    for i = 1:length(xs)-1
-        normVal = (kValues(i) - kMin) / (kMax - kMin);
-        normVal = min(max(normVal, 0), 1);
+    title(hAx, sprintf('Spline über Originalbild (Frame %d / %d)', n, numel(ImageData)));
+    hold(hAx, 'off');
+end
 
-        colorIdx = max(1, round(normVal * 255) + 1);
-        lineColor = cmap(colorIdx,:);
 
-        plot(hAx, xs(i:i+1), ys(i:i+1), ...
-            '-', 'LineWidth', 3, 'Color', lineColor);
+%% Lokale Funktion: kubische Least-Squares-Spline durch die Skelettpunkte
+% Parametrische Kurve S(t) = [Sx(t), Sy(t)], t = Bogenlänge [px].
+% Knoten gleichmäßig im Abstand ~knotSpacing. Die Koeffizienten werden so
+% bestimmt, dass sum_i |P_i - S(t_i)|^2 minimal ist (lineares Least Squares).
+% Mit nParamIter > 0 wird t_i danach jeweils auf den Fußpunkt (nächster
+% Punkt der Spline zu P_i) korrigiert und neu gefittet -> minimiert den
+% orthogonalen Abstand der Punkte zur Kurve.
+function [ppx, ppy, rms] = fitSplineLSQ(t, x, y, knotSpacing, nParamIter)
+    t = t(:); x = x(:); y = y(:);
+
+    nKnots = max(4, round((t(end) - t(1)) / knotSpacing) + 1);
+    nKnots = min(nKnots, numel(t));          % nie mehr Knoten als Datenpunkte
+    knots  = linspace(t(1), t(end), nKnots);
+
+    % Basis: Spalte j = kubische Spline (not-a-knot), die in Knoten j den
+    % Wert 1 und in allen anderen Knoten 0 hat. Da spline() linear in den
+    % Knotenwerten ist, gilt S(t) = B(t) * c  ->  c = B \ x (Least Squares).
+    ppBasis = spline(knots, eye(nKnots));
+
+    for it = 0:nParamIter
+        B   = reshape(ppval(ppBasis, t.'), nKnots, []).';   % numel(t) x nKnots
+        ppx = spline(knots, (B \ x).');
+        ppy = spline(knots, (B \ y).');
+
+        ex = x - ppval(ppx, t);
+        ey = y - ppval(ppy, t);
+        if it == nParamIter
+            break
+        end
+
+        % Fußpunkt-Korrektur (Gauss-Newton-Schritt auf |P_i - S(t_i)|^2)
+        dx = ppval(ppDeriv(ppx), t);
+        dy = ppval(ppDeriv(ppy), t);
+        t  = t + (ex.*dx + ey.*dy) ./ (dx.^2 + dy.^2);
+        t  = min(max(t, knots(1)), knots(end));
     end
 
-    title(hAx, sprintf('Skelett über Originalbild (Frame %d / %d)', n, numel(ImageData)));
-    hold(hAx, 'off');
+    rms = sqrt(mean(ex.^2 + ey.^2));
+end
+
+
+%% Lokale Funktion: Spline auswerten + Krümmung aus exakten Ableitungen
+function [xs, ys, kappa] = splineCurvature(ppx, ppy, s)
+    ppdx = ppDeriv(ppx);  ppddx = ppDeriv(ppdx);
+    ppdy = ppDeriv(ppy);  ppddy = ppDeriv(ppdy);
+
+    xs  = ppval(ppx, s);    ys  = ppval(ppy, s);
+    dx  = ppval(ppdx, s);   dy  = ppval(ppdy, s);
+    ddx = ppval(ppddx, s);  ddy = ppval(ppddy, s);
+
+    kappa = abs(dx.*ddy - dy.*ddx) ./ (dx.^2 + dy.^2).^(1.5);
+end
+
+
+%% Lokale Funktion: exakte Ableitung einer stückweisen Polynomfunktion (pp-Form)
+function dpp = ppDeriv(pp)
+    [breaks, coefs, ~, order, dim] = unmkpp(pp);
+    dcoefs = coefs(:, 1:order-1) .* (order-1:-1:1);
+    dpp = mkpp(breaks, dcoefs, dim);
 end

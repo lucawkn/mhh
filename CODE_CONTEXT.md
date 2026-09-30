@@ -151,6 +151,35 @@ HSV-Maske versagt → Segmentierung über **vorberechnete SAM-2-Masken** (statt
 
 ---
 
+## `kruemung_jinhan_v2_luca.m` — wie `kruemung_jinhan.m`, Krümmung per Spline-Fit
+
+**Zweck:** gleiche Pipeline wie `kruemung_jinhan.m` (AVI, SAM-2-Masken), aber
+die Krümmung wird **rauscharm über eine Least-Squares-Spline** berechnet statt
+über `interp1` auf wenige Punkte + `gradient`.
+
+**Krümmungsberechnung:**
+- **Alle** Skelettpixel (sortiert nach geodätischer Bogenlänge `d`) werden mit
+  einer kubischen Regressionsspline approximiert (`fitSplineLSQ`): Knoten
+  gleichmäßig im Abstand `knotSpacing`, Koeffizienten per linearem Least
+  Squares (`c = B \ x`; Basis `B` = `spline(knots, eye(nKnots))` ausgewertet,
+  not-a-knot, nur Basis-MATLAB, keine Toolbox nötig).
+- `nParamIter` Fußpunkt-Iterationen: Parameter jedes Pixels wird auf den
+  nächstgelegenen Spline-Punkt korrigiert und neu gefittet → minimiert den
+  **orthogonalen** Abstand Pixel ↔ Spline.
+- Krümmung **analytisch** aus den exakten Spline-Ableitungen (`ppDeriv` auf der
+  pp-Form), ausgewertet an `Neval=200` Punkten; `mean_kappa` = Mittel darüber.
+- `ImageData(n).fitRMS` = RMS-Abstand Pixel ↔ Spline [px] (Kontrolle; ~0.3–0.5 px
+  ist normal durch Pixelrasterung).
+- Anzeige: Spline als ein `patch` mit Farbverlauf (`EdgeColor='interp'`).
+
+**Wichtige Parameter:** `knotSpacing=40` px (größer = glatter; Test an
+gerasterten Kreisen/Spiralen R≈80–330 px: Fehler der mittleren Krümmung ~2 %,
+lokal ~7 % in der Drahtmitte, an den Enden größer), `nParamIter=3`, `Neval=200`.
+**Achtung:** `max_kappa=0.0090` war auf die alte Methode abgestimmt; die
+Spline-Werte sind genauer, die Normierung ggf. neu bestimmen.
+
+---
+
 ## `inlayGeometry.m` — Referenz-Krümmung des Inlays (TB01Lv01)
 
 **Zweck:** analytische Inlay-Geometrie (6 Kreisbögen aus Radien/Zentren/Winkeln
