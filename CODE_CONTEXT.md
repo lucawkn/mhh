@@ -8,7 +8,7 @@ Das Repository enthält die **Bildauswertungs- / Tracking-Skripte**
 (Auswertung der aufgenommenen Bilder bzw. Videos):
 - **Krümmung:** `kruemung.m` (Draht, JPG), `kruemung_hai.m` (Schlauch, AVI),
   `kruemung_jinhan.m` (Draht, AVI), `inlayGeometry.m` (Referenz-Krümmung des
-  Inlays).
+  Inlays); Spline-Varianten `kruemung_jinhan_v2_luca.m` + `inlayGeometry_v2.m`.
 - **Tip-Tracking:** `tip_track_matching_spline.m` (JPG), `cochlea_model_tracking2.m`
   (MP4), `create_trajectory.m` (Referenztrajektorie).
 - **SAM-2-Segmentierung (Python):** `segment_wire_sam2.py` + `README_SAM2.md`
@@ -176,7 +176,7 @@ die Krümmung wird **rauscharm über eine Least-Squares-Spline** berechnet statt
 gerasterten Kreisen/Spiralen R≈80–330 px: Fehler der mittleren Krümmung ~2 %,
 lokal ~7 % in der Drahtmitte, an den Enden größer), `nParamIter=3`, `Neval=200`.
 **Achtung:** `max_kappa=0.0090` war auf die alte Methode abgestimmt; die
-Spline-Werte sind genauer, die Normierung ggf. neu bestimmen.
+passende Normierung mit derselben Spline-Methode liefert `inlayGeometry_v2.m`.
 
 ---
 
@@ -194,6 +194,25 @@ direkt auf den 7 Punkten, `kappa = |x'y''−y'x''|/(x'²+y'²)^1.5`,
 Pixel-Maßstab des Videos gebracht (Kalibrierwert eintragen, `1` = keine
 Umrechnung). Die gerade Einlaufstrecke ist eingeschlossen. Ausgabe: mittlere
 Krümmung zum Einsetzen als `max_kappa`.
+
+---
+
+## `inlayGeometry_v2.m` — Referenz-Krümmung des Inlays (Spline-Methode)
+
+**Zweck:** wie `inlayGeometry.m` (gleiche Geometrie), aber die Krümmung wird
+mit **derselben Least-Squares-Spline-Methode wie `kruemung_jinhan_v2_luca.m`**
+berechnet → Ergebnis ist die Normierung `max_kappa` für dieses Skript.
+
+- Lokale Funktionen `fitSplineLSQ`, `splineCurvature`, `ppDeriv` sind
+  **Kopien** aus `kruemung_jinhan_v2_luca.m` → bei Änderungen beide anpassen;
+  ebenso die Parameter `knotSpacing=40`, `nParamIter=3`, `Neval=200`.
+- `pxPerMm` (Kalibrierung) muss stimmen: Krümmung skaliert mit 1/Maßstab UND
+  `knotSpacing` ist in px. Warnung, wenn die Inlay-Länge < 4·`knotSpacing` ist
+  (z.B. bei `pxPerMm=1`: Inlay nur ~16 px lang).
+- Gibt zusätzlich die **exakte** mittlere Krümmung aus
+  (`Σ Bogenwinkel / Gesamtlänge`; Gerade κ=0, Bögen κ=1/r) und plottet den
+  Krümmungsverlauf Spline vs. exakt. Test (Octave, `pxPerMm=30`): Spline
+  0.0145 vs. exakt 0.0142 1/px.
 
 ---
 
