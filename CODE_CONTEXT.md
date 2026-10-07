@@ -171,6 +171,9 @@ die Krümmung wird **rauscharm über eine Least-Squares-Spline** berechnet statt
 - `ImageData(n).fitRMS` = RMS-Abstand Pixel ↔ Spline [px] (Kontrolle; ~0.3–0.5 px
   ist normal durch Pixelrasterung).
 - Anzeige: Spline als ein `patch` mit Farbverlauf (`EdgeColor='interp'`).
+- Nach der Maskenprüfung fragt ein `questdlg` („Maskenkontrolle“), ob die
+  Schwarz/Weiß-Maske jedes Frames in `figure(1)` angezeigt werden soll
+  (`showMasks`; Default/Fenster schließen = nicht anzeigen → spart Zeit).
 
 **Wichtige Parameter:** `knotSpacing=40` px (größer = glatter; Test an
 gerasterten Kreisen/Spiralen R≈80–330 px: Fehler der mittleren Krümmung ~2 %,

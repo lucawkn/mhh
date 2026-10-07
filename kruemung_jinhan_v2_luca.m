@@ -65,6 +65,11 @@ if numel(maskListing) ~= ImageNummax
         numel(maskListing), ImageNummax, maskDir);
 end
 
+%% 2b. Masken während der Auswertung anzeigen? (kostet Zeit, nur zur Kontrolle)
+answer = questdlg('Schwarz/Weiß-Maske jedes Frames anzeigen (Kontrolle der Segmentierung)?', ...
+    'Maskenkontrolle', 'Anzeigen', 'Nicht anzeigen', 'Nicht anzeigen');
+showMasks = strcmp(answer, 'Anzeigen');   % Fenster geschlossen -> nicht anzeigen
+
 % Initialize structure array
 ImageData = struct('name', [], 'path', [], 'rgb', [], 'bw', []);
 ImageData(ImageNummax).name = [];
@@ -95,8 +100,12 @@ for n = 1:ImageNummax
     end
     tubeFG = bwLargest;
 
-    figure(1)
-    imshow(tubeFG);
+    if showMasks
+        figure(1)
+        imshow(tubeFG);
+        title(sprintf('Maske Frame %d / %d', n, ImageNummax));
+        drawnow;
+    end
 
     % --- Skelettierung mit Lückenschließung ---
 
