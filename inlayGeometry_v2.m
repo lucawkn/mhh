@@ -4,11 +4,11 @@
 %
 % Erweiterung v2: Die Krümmung wird mit DERSELBEN Methode wie in
 % kruemung_jinhan_v2_luca.m berechnet (kubische Least-Squares-Spline durch
-% die Kurvenpunkte + analytische Krümmung aus den Spline-Ableitungen), damit
-% die mittlere Krümmung direkt als Normierung (max_kappa) für
-% kruemung_jinhan_v2_luca.m verwendet werden kann.
-% Zum Vergleich wird zusätzlich die EXAKTE mittlere Krümmung der Geometrie
-% ausgegeben (Kreisbögen: kappa = 1/r, Gerade: kappa = 0).
+% die Kurvenpunkte + analytische Krümmung aus den Spline-Ableitungen).
+% Zusätzlich wird die EXAKTE mittlere Krümmung der Geometrie ausgegeben
+% (Kreisbögen: kappa = 1/r, Gerade: kappa = 0). Der exakte Wert in 1/mm ist
+% die Referenzlinie kappaInlay in kruemung_jinhan_v2_luca.m; der Spline-Wert
+% zeigt, wie nah die Spline-Methode bei diesem Maßstab an die Geometrie kommt.
 
 clear all;
 close all;
@@ -119,7 +119,7 @@ end
 s = linspace(ppx.breaks(1), ppx.breaks(end), Neval);
 [xs, ys, kappa] = splineCurvature(ppx, ppy, s);
 
-meanKappa = mean(kappa, 'omitnan');   % = Wert für max_kappa in kruemung_jinhan_v2_luca.m
+meanKappa = mean(kappa, 'omitnan');   % mittlere Krümmung Spline [1/px]
 
 %% Exakte Krümmung der Geometrie (zum Vergleich)
 % Gerade: kappa = 0; Bogen i: kappa = 1/r_i über die Bogenlänge r_i*(b_i-a_i).
@@ -131,8 +131,9 @@ meanKappaExact = sum(segKappa .* segLen) / sum(segLen);
 % --- Ausgabe ---
 fprintf('\nInlay-Krümmung (Methode wie kruemung_jinhan_v2_luca.m, Maßstab %.4f px/mm):\n', pxPerMm);
 fprintf('  knotSpacing = %g px, Spline-Fit RMS = %.4f px\n', knotSpacing, fitRMS);
-fprintf('Mittlere Krümmung Spline (= max_kappa für kruemung_jinhan_v2_luca.m): %.4f 1/px\n', meanKappa);
-fprintf('Mittlere Krümmung exakt (Geometrie):                                %.4f 1/px\n', meanKappaExact);
+fprintf('Mittlere Krümmung Spline:            %.4f 1/px = %.4f 1/mm\n', meanKappa, meanKappa*pxPerMm);
+fprintf('Mittlere Krümmung exakt (Geometrie): %.4f 1/px = %.4f 1/mm  (= kappaInlay in kruemung_jinhan_v2_luca.m)\n', ...
+    meanKappaExact, meanKappaExact*pxPerMm);
 
 % --- Spline im Geometrie-Plot (in mm-Koordinaten für die Anzeige) ---
 hold on;

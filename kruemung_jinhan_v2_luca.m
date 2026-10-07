@@ -7,7 +7,8 @@
 %    Least-Squares-Spline approximiert (Abstand Punkte <-> Spline minimal),
 %    die Krümmung wird dann ANALYTISCH aus den Spline-Ableitungen berechnet
 %    (kein Rauschen durch numerisches Differenzieren der Pixelpunkte).
-% 3. Mittlere Krümmung über die Zeit plotten
+% 3. Mittlere Krümmung über die Zeit plotten (absolut in 1/mm, mit der
+%    mittleren Inlay-Krümmung als Referenzlinie = Zielform)
 % 4. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 %
 % WICHTIG - zweistufiger Workflow (die HSV-Maske aus kruemung_hai.m schlägt
@@ -20,7 +21,10 @@
 %   Schritt 2: dieses Skript ausführen (lädt die PNGs statt createMask).
 clear; clc; close all;
 
-max_kappa = 0.0090;
+pxPerMm    = 1;        % Kalibrierung des Videos [px/mm] - ECHTEN Wert eintragen!
+                       % (z.B. mit imdistline eine bekannte Länge im Frame messen)
+kappaInlay = 0.4252;   % mittlere Inlay-Krümmung [1/mm] (exakt aus der Geometrie,
+                       % siehe inlayGeometry_v2.m) -> Referenzlinie im Plot
 
 % --- Parameter Spline-Fit ---
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
@@ -174,17 +178,20 @@ for n = 1:ImageNummax
 
 end
 
-%% 4. Mittlere Krümmung über die Zeit
-mean_kappa_vec = [ImageData.mean_kappa].';
-mean_kappa_vec = mean_kappa_vec / max_kappa;
+%% 4. Mittlere Krümmung über die Zeit (absolut in 1/mm)
+if pxPerMm == 1
+    warning('pxPerMm = 1: Krümmung wird in 1/px statt 1/mm angezeigt - Kalibrierwert eintragen!');
+end
+mean_kappa_mm = [ImageData.mean_kappa].' * pxPerMm;   % 1/px -> 1/mm
 figure(2)
-plot(tVec, mean_kappa_vec, 'LineWidth', 2, 'Color', [0.8, 0.2, 0.6]);
+plot(tVec, mean_kappa_mm, 'LineWidth', 2, 'Color', [0.8, 0.2, 0.6]);
+yline(kappaInlay, '--k', 'Inlay (Ziel)');
 xlabel('Zeit [s]');
-ylabel('Mittlere Krümmung (normiert)');
+ylabel('Mittlere Krümmung [1/mm]');
 title('Mittlere Krümmung über die Zeit');
-fprintf('max_kappa normiert = %.4f\n', max(mean_kappa_vec));
-fprintf('max_kappa nicht normiert = %.4f\n', max([ImageData.mean_kappa].'));
-fprintf('end_kappa normiert = %.4f\n', mean_kappa_vec(end));
+fprintf('max_kappa = %.4f 1/mm (Radius %.2f mm)\n', max(mean_kappa_mm), 1/max(mean_kappa_mm));
+fprintf('end_kappa = %.4f 1/mm (Radius %.2f mm)\n', mean_kappa_mm(end), 1/mean_kappa_mm(end));
+fprintf('Inlay     = %.4f 1/mm (Radius %.2f mm)\n', kappaInlay, 1/kappaInlay);
 fprintf('Spline-Fit: mittlerer RMS-Abstand = %.2f px (max %.2f px)\n', ...
     mean([ImageData.fitRMS], 'omitnan'), max([ImageData.fitRMS]));
 

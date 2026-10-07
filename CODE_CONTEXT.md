@@ -175,8 +175,12 @@ die Krümmung wird **rauscharm über eine Least-Squares-Spline** berechnet statt
 **Wichtige Parameter:** `knotSpacing=40` px (größer = glatter; Test an
 gerasterten Kreisen/Spiralen R≈80–330 px: Fehler der mittleren Krümmung ~2 %,
 lokal ~7 % in der Drahtmitte, an den Enden größer), `nParamIter=3`, `Neval=200`.
-**Achtung:** `max_kappa=0.0090` war auf die alte Methode abgestimmt; die
-passende Normierung mit derselben Spline-Methode liefert `inlayGeometry_v2.m`.
+**Keine Normierung mehr:** Die Spline-Krümmung ist ein echter Messwert. `figure(2)`
+zeigt die mittlere Krümmung **absolut in 1/mm** (`[ImageData.mean_kappa] * pxPerMm`;
+`ImageData` bleibt intern in 1/px) mit gestrichelter Referenzlinie `kappaInlay`
+(= exakte mittlere Inlay-Krümmung 0.4252 1/mm, Radius ≈ 2.35 mm, aus
+`inlayGeometry_v2.m`). Ausgabe max./End-Krümmung in 1/mm + Radius.
+`pxPerMm` (Kalibrierung des Videos) muss eingetragen werden; bei `1` → Warnung.
 
 ---
 
@@ -201,7 +205,10 @@ Krümmung zum Einsetzen als `max_kappa`.
 
 **Zweck:** wie `inlayGeometry.m` (gleiche Geometrie), aber die Krümmung wird
 mit **derselben Least-Squares-Spline-Methode wie `kruemung_jinhan_v2_luca.m`**
-berechnet → Ergebnis ist die Normierung `max_kappa` für dieses Skript.
+berechnet. Die **exakte** mittlere Krümmung in 1/mm ist die Referenzlinie
+`kappaInlay` in `kruemung_jinhan_v2_luca.m`; der Spline-Wert zeigt, wie gut die
+Spline-Methode beim gewählten Maßstab die Geometrie trifft. Ausgabe beider
+Werte in 1/px und 1/mm.
 
 - Lokale Funktionen `fitSplineLSQ`, `splineCurvature`, `ppDeriv` sind
   **Kopien** aus `kruemung_jinhan_v2_luca.m` → bei Änderungen beide anpassen;
