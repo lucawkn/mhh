@@ -174,6 +174,15 @@ die Krümmung wird **rauscharm über eine Least-Squares-Spline** berechnet statt
 - Nach der Maskenprüfung fragt ein `questdlg` („Maskenkontrolle“), ob die
   Schwarz/Weiß-Maske jedes Frames in `figure(1)` angezeigt werden soll
   (`showMasks`; Default/Fenster schließen = nicht anzeigen → spart Zeit).
+- **Startpunkt der Bogenlänge wird nachverfolgt** (statt `ex(1)` = linkester
+  Endpunkt, der je Frame die Richtung drehen konnte): erster gültiger Frame →
+  Endpunkt am nächsten zum Bildrand (eingespanntes Ende), danach Endpunkt am
+  nächsten zu `prevStart` (Startpunkt des Vorframes). `ImageData(n).s` =
+  Bogenlänge ab Startpunkt [px].
+- **`figure(3)`: 3D-Plot κ(Länge, Zeit)** per `surf`: gemeinsame Längsachse
+  `sGrid` in mm (0 … größte Länge), pro Frame `interp1` von `kappa` (in 1/mm)
+  auf `sGrid`, kürzere Frames → NaN (Lücke). Von oben (`view(2)`) = Heatmap.
+  Achtung: an den Drahtenden ist die Spline-Krümmung ungenauer (Ausreißer möglich).
 
 **Wichtige Parameter:** `knotSpacing=40` px (größer = glatter; Test an
 gerasterten Kreisen/Spiralen R≈80–330 px: Fehler der mittleren Krümmung ~2 %,

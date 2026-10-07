@@ -9,7 +9,8 @@
 %    (kein Rauschen durch numerisches Differenzieren der Pixelpunkte).
 % 3. Mittlere Krümmung über die Zeit plotten (absolut in 1/mm, mit der
 %    mittleren Inlay-Krümmung als Referenzlinie = Zielform)
-% 4. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
+% 4. 3D-Plot: Krümmung über Länge (mm ab Startpunkt) und Zeit
+% 5. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 %
 % WICHTIG - zweistufiger Workflow (die HSV-Maske aus kruemung_hai.m schlägt
 % bei diesen Videos fehl, daher Segmentierung mit Segment Anything Model 2):
@@ -74,6 +75,8 @@ showMasks = strcmp(answer, 'Anzeigen');   % Fenster geschlossen -> nicht anzeige
 ImageData = struct('name', [], 'path', [], 'rgb', [], 'bw', []);
 ImageData(ImageNummax).name = [];
 
+prevStart = [];   % Startpunkt (Länge = 0) des vorherigen Frames [x y]
+
 %% 3. Hauptschleife über alle Frames
 for n = 1:ImageNummax
     img = read(v, n);
@@ -119,6 +122,7 @@ for n = 1:ImageNummax
     xs     = nan(1, Neval);
     ys     = nan(1, Neval);
     kappa  = nan(1, Neval);
+    s      = nan(1, Neval);
     fitRMS = NaN;
     skel   = false(size(tubeFG_closed));
 
@@ -141,7 +145,19 @@ for n = 1:ImageNummax
         [yy, xx] = find(skel);
 
         if ~isempty(ex) && numel(yy) >= 2
-            x0 = ex(1); y0 = ey(1);
+            % Startpunkt (Länge = 0) über alle Frames konsistent wählen:
+            % erster gültiger Frame -> Endpunkt am nächsten zum Bildrand
+            % (eingespanntes Ende), danach -> Endpunkt am nächsten zum
+            % Startpunkt des vorherigen Frames (Nachverfolgen).
+            if isempty(prevStart)
+                [H, W] = size(skel);
+                distKey = min([ex-1, ey-1, W-ex, H-ey], [], 2);
+            else
+                distKey = hypot(ex - prevStart(1), ey - prevStart(2));
+            end
+            [~, iStart] = min(distKey);
+            x0 = ex(iStart); y0 = ey(iStart);
+            prevStart = [x0 y0];
 
             D = bwdistgeodesic(skel, x0, y0, 'quasi-euclidean');
             d = D(sub2ind(size(skel), yy, xx));
@@ -181,6 +197,7 @@ for n = 1:ImageNummax
     ImageData(n).xs = xs;
     ImageData(n).ys = ys;
     ImageData(n).kappa = kappa;
+    ImageData(n).s = s;                   % Bogenlänge ab Startpunkt [px]
     ImageData(n).mean_kappa = mean(kappa, 'omitnan');
     ImageData(n).fitRMS = fitRMS;         % RMS-Abstand Skelettpixel <-> Spline [px]
     ImageData(n).path = videoFullPath;
@@ -203,6 +220,31 @@ fprintf('end_kappa = %.4f 1/mm (Radius %.2f mm)\n', mean_kappa_mm(end), 1/mean_k
 fprintf('Inlay     = %.4f 1/mm (Radius %.2f mm)\n', kappaInlay, 1/kappaInlay);
 fprintf('Spline-Fit: mittlerer RMS-Abstand = %.2f px (max %.2f px)\n', ...
     mean([ImageData.fitRMS], 'omitnan'), max([ImageData.fitRMS]));
+
+%% 4b. Krümmung über Länge und Zeit (3D)
+sEnd = arrayfun(@(D) max(D.s), ImageData);   % Länge je Frame [px], NaN = ungültig
+if nnz(~isnan(sEnd)) < 2
+    warning('Weniger als 2 gültige Frames - 3D-Plot wird übersprungen.');
+else
+    % Gemeinsame Längsachse [mm]; kürzere Frames bekommen am Ende NaN (Lücke)
+    sGrid = linspace(0, max(sEnd) / pxPerMm, Neval);
+    K = nan(Neval, ImageNummax);              % Krümmung [1/mm]: Zeile = Länge, Spalte = Frame
+    for n = find(~isnan(sEnd))
+        K(:, n) = interp1(ImageData(n).s / pxPerMm, ImageData(n).kappa * pxPerMm, ...
+            sGrid, 'linear', NaN).';
+    end
+
+    figure(3)
+    surf(tVec, sGrid, K);
+    shading interp;
+    colormap(jet);
+    colorbar;
+    xlabel('Zeit [s]');
+    ylabel('Länge ab Startpunkt [mm]');
+    zlabel('Krümmung [1/mm]');
+    title('Krümmung über Länge und Zeit (von oben: view(2) = Heatmap)');
+    view(3);
+end
 
 
 %% 5. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
