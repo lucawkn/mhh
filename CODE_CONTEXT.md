@@ -157,6 +157,9 @@ HSV-Maske versagt → Segmentierung über **vorberechnete SAM-2-Masken** (statt
 die Krümmung wird **rauscharm über eine Least-Squares-Spline** berechnet statt
 über `interp1` auf wenige Punkte + `gradient`.
 
+**Ausführliche Methodenbeschreibung:** `README_kruemung_jinhan_v2.md` (von der
+Maske über Skelett, Spline-Fit und Krümmung bis zu den Plots).
+
 **Krümmungsberechnung:**
 - **Alle** Skelettpixel (sortiert nach geodätischer Bogenlänge `d`) werden mit
   einer kubischen Regressionsspline approximiert (`fitSplineLSQ`): Knoten
