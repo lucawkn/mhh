@@ -225,6 +225,29 @@ Batch-/Excel-Logik übernommen aus dem Nutzer-Skript
 
 ---
 
+## `spannungstrend_auswertung_luca.m` — Trend-Plots Neue Metrik vs. Luca's Metrik
+
+**Zweck:** liest die Testlisten-Excel (gefüllt von v16: M:V und von
+`kruemung_jinhan_v2_luca_batch.m`: W:Z) und vergleicht pro Parametersatz
+(Pulslänge × Pulsanzahl × Pulspause) **Neue Metrik** (M = NEU Max k_netto,
+N = NEU End k_netto) mit **Luca's Metrik** (W = Spline Max, X = Spline End).
+Basis: Nutzer-Skript `spannungstrend_auswertung_v2.m` (nicht im Repo); ALT-V3,
+Aufrollzeit und Retention entfallen.
+
+- x-Größen: **Spannung-set** (C) und **Gesamtenergie** `E = Leistung-FM (H) ·
+  Pulslänge · Pulsanzahl` [mJ] (fehlt H → E·G).
+- Plots je Parametersatz (2×2, nur Messwerte verbunden): oben NEU | Luca über
+  Spannung, unten NEU | Luca über Energie; je kmax und kend. PNGs in
+  `<Excel>_Spannungstrend_Luca_Plots_<Zeit>`.
+- Trend-Statistik (Steigung, R², p, Spearman) je Metrik × x-Größe →
+  `<Excel>_Spannungstrend_Luca_<Zeit>.xlsx` (Blätter `Trend_Ergebnisse`,
+  `Extrahierte_Daten`, `Info`); Quelldatei bleibt unverändert.
+- Stand der Daten (Okt. 2026): Luca kmax enthält starke Ausreißer (bis 8189 1/mm,
+  95 %-Quantil 2,2 vs. Median 0,44) → Max ist im Batch-Skript nicht robust gegen
+  einzelne Fehlframes.
+
+---
+
 ## `inlayGeometry.m` — Referenz-Krümmung des Inlays (TB01Lv01)
 
 **Zweck:** analytische Inlay-Geometrie (6 Kreisbögen aus Radien/Zentren/Winkeln
