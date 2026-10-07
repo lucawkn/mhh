@@ -290,3 +290,42 @@ Dateien tun.
   nur wenig bewegt. Das sollte man bei einem neuen Versuchsaufbau einmal prüfen.
 - **Maßstab:** Absolute Werte in mm und 1/mm stimmen nur mit einem korrekt
   eingetragenen `pxPerMm` für genau diese Kameraeinstellung.
+
+---
+
+## 7. Batch-Version mit Excel-Export: `kruemung_jinhan_v2_luca_batch.m`
+
+Die Batch-Version wertet **alle `.avi`-Videos eines Ordners** nacheinander aus.
+Die Krümmung pro Frame wird genau wie oben berechnet (Abschnitt 3). Statt Plots
+schreibt das Skript pro Video drei Kennwerte in die Testlisten-Excel.
+
+**Ablauf:**
+
+1. Ordner mit den Videos wählen und die Excel-Datei einmal wählen.
+2. Für jedes Video die Testparameter aus dem Dateinamen lesen:
+   `...-<Pulslänge>-<Pulspause>-<Pulsanzahl>-<Spannung>`. Beispiel:
+   `KP-MV71-11-15-15-2-3.4 20260908_170422_video` bedeutet 15 ms Pulslänge,
+   15 ms Pause, 2 Pulse und 3,4 V.
+3. Die passende Zeile suchen: Blatt `Pulslänge-15ms`, dann der Block mit
+   passender Pulsanzahl und Pause, dann die Zeile mit der passenden Spannung.
+4. Ist Spalte **Z** dieser Zeile schon gefüllt, wird das Video **übersprungen**,
+   ohne es auszuwerten. So kann man einen abgebrochenen Lauf einfach neu
+   starten.
+5. Alle Masken auswerten und daraus die Kennwerte bilden (siehe Tabelle).
+6. Die Kennwerte eintragen. Es werden **nur leere Zellen** beschrieben, Z kommt
+   zuletzt.
+
+| Spalte | Inhalt |
+|---|---|
+| W | größte mittlere Krümmung über alle Frames [1/mm] |
+| X | mittlere Krümmung im letzten auswertbaren Frame [1/mm] |
+| Y | Zeitpunkt der größten mittleren Krümmung [s] |
+| Z | Name des Videos (Abschlussmarker) |
+
+Die Spalten M:V gehören dem v16-Skript und werden nicht angefasst.
+
+**Feste Einstellungen:** `pxPerMm = 43`. Die Bildrate kommt aus der Videodatei.
+Es entstehen keine Plots, und die RGB-Frames werden nicht geladen.
+
+**Ausgabe am Ende:** wie viele Videos ausgewertet, übersprungen oder
+fehlgeschlagen sind, jeweils mit Namen.

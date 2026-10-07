@@ -8,7 +8,8 @@ Das Repository enthält die **Bildauswertungs- / Tracking-Skripte**
 (Auswertung der aufgenommenen Bilder bzw. Videos):
 - **Krümmung:** `kruemung.m` (Draht, JPG), `kruemung_hai.m` (Schlauch, AVI),
   `kruemung_jinhan.m` (Draht, AVI), `inlayGeometry.m` (Referenz-Krümmung des
-  Inlays); Spline-Varianten `kruemung_jinhan_v2_luca.m` + `inlayGeometry_v2.m`.
+  Inlays); Spline-Varianten `kruemung_jinhan_v2_luca.m` (+ Batch/Excel:
+  `kruemung_jinhan_v2_luca_batch.m`) + `inlayGeometry_v2.m`.
 - **Tip-Tracking:** `tip_track_matching_spline.m` (JPG), `cochlea_model_tracking2.m`
   (MP4), `create_trajectory.m` (Referenztrajektorie).
 - **SAM-2-Segmentierung (Python):** `segment_wire_sam2.py` + `README_SAM2.md`
@@ -196,6 +197,31 @@ zeigt die mittlere Krümmung **absolut in 1/mm** (`[ImageData.mean_kappa] * pxPe
 (= exakte mittlere Inlay-Krümmung 0.4252 1/mm, Radius ≈ 2.35 mm, aus
 `inlayGeometry_v2.m`). Ausgabe max./End-Krümmung in 1/mm + Radius.
 `pxPerMm` (Kalibrierung des Videos) muss eingetragen werden; bei `1` → Warnung.
+
+---
+
+## `kruemung_jinhan_v2_luca_batch.m` — Batch-Version mit Excel-Export
+
+**Zweck:** alle `.avi` eines Ordners mit der **identischen** Spline-Krümmung wie
+`kruemung_jinhan_v2_luca.m` auswerten (Pipeline pro Frame in lokaler Funktion
+`frameMeanCurvature`) und die Kennwerte in die Testlisten-Excel schreiben.
+Batch-/Excel-Logik übernommen aus dem Nutzer-Skript
+`kruemmung_jinhan_v16_batch_skip_excel.m` (nicht im Repo).
+
+- Ordner (`uigetdir`) + Excel einmal wählen; Testparameter aus dem Dateinamen
+  `...-<Pulslaenge>-<Pulspause>-<Pulsanzahl>-<Spannung>` (`parseVideoTestParams`).
+- Zielzeile: Blatt `Pulslänge-<x>ms`, Block mit passender Pulslänge/-anzahl/
+  -pause (Zeile mit `Pulslänge/ms` in Spalte B), dann Zeile mit `Spannung-set`
+  in Spalte C (`getExcelTargetState`).
+- **Spalten W:Z** (M:V gehören dem v16-Skript): W = Max mittlere Krümmung
+  [1/mm], X = End-Krümmung (letzter gültiger Frame) [1/mm], Y = Zeitpunkt des
+  Max [s], **Z = Video-Datei = Abschlussmarker** (zuletzt geschrieben). Zeilen
+  mit gefülltem Z werden vor der Auswertung übersprungen; nur leere Zellen
+  werden beschrieben; Header in W:Z der Headerzeile nur, wo leer.
+- `pxPerMm = 43`, Bildrate aus dem Video (`v.FrameRate`); keine Plots, keine
+  RGB-Frames; `try/catch` pro Video + Zusammenfassung am Ende.
+- Spline-Funktionen sind eine Kopie aus `kruemung_jinhan_v2_luca.m`
+  (identisch halten, ebenso `knotSpacing`/`nParamIter`/`Neval`).
 
 ---
 
