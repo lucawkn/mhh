@@ -187,6 +187,15 @@ Maske über Skelett, Spline-Fit und Krümmung bis zu den Plots).
   `sGrid` in mm (0 … größte Länge), pro Frame `interp1` von `kappa` (in 1/mm)
   auf `sGrid`, kürzere Frames → NaN (Lücke). Von oben (`view(2)`) = Heatmap.
   Achtung: an den Drahtenden ist die Spline-Krümmung ungenauer (Ausreißer möglich).
+- **Ausreißerframes** (`replaceOutlierFrames`, auf der Zeitreihe der mittleren
+  Krümmung in 1/mm): Ausreißer, wenn > `kappaPhysMax=2` 1/mm oder wenn die
+  Abweichung vom Median der gültigen Nachbarn (±`outlierWin=3` Frames) größer
+  ist als max(`outlierMinJump=0.15` 1/mm, `outlierNSigma=4`·1.4826·MAD). Bis zu
+  3 Durchläufe. Ersetzt wird durch lineare Interpolation zwischen den nächsten
+  gültigen Nachbarn (am Rand: nächster Wert); Protokoll in der Konsole.
+  figure(2) und Ausgaben nutzen die bereinigte Reihe; im 3D-Plot sind
+  Ausreißerframes Lücken, im Slider ausgeblendet (`ImageData(n).isOutlier`).
+  Anlass: Luca kmax bis 8189 1/mm in der Excel durch Einzel-Fehlframes.
 
 **Wichtige Parameter:** `knotSpacing=40` px (größer = glatter; Test an
 gerasterten Kreisen/Spiralen R≈80–330 px: Fehler der mittleren Krümmung ~2 %,
@@ -220,6 +229,8 @@ Batch-/Excel-Logik übernommen aus dem Nutzer-Skript
   werden beschrieben; Header in W:Z der Headerzeile nur, wo leer.
 - `pxPerMm = 43`, Bildrate aus dem Video (`v.FrameRate`); keine Plots, keine
   RGB-Frames; `try/catch` pro Video + Zusammenfassung am Ende.
+- Vor Max/End/Zeitpunkt werden Ausreißerframes durch Nachbarn ersetzt
+  (`replaceOutlierFrames`, gleiche Parameter und Funktion wie im Einzelskript).
 - Spline-Funktionen sind eine Kopie aus `kruemung_jinhan_v2_luca.m`
   (identisch halten, ebenso `knotSpacing`/`nParamIter`/`Neval`).
 

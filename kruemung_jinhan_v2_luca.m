@@ -7,7 +7,8 @@
 %    Least-Squares-Spline approximiert (Abstand Punkte <-> Spline minimal),
 %    die Krümmung wird dann ANALYTISCH aus den Spline-Ableitungen berechnet
 %    (kein Rauschen durch numerisches Differenzieren der Pixelpunkte).
-% 3. Mittlere Krümmung über die Zeit plotten (absolut in 1/mm, mit der
+% 3. Ausreißerframes (Fehlsegmentierung) durch ihre Nachbarn ersetzen und die
+%    mittlere Krümmung über die Zeit plotten (absolut in 1/mm, mit der
 %    mittleren Inlay-Krümmung als Referenzlinie = Zielform)
 % 4. 3D-Plot: Krümmung über Länge (mm ab Startpunkt) und Zeit
 % 5. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
@@ -32,6 +33,12 @@ knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleine
 nParamIter  = 3;     % Fußpunkt-Iterationen (0 = Punkte nur über Bogenlänge zuordnen,
                      % >0 = echter orthogonaler Abstand Punkt <-> Spline wird minimiert)
 Neval       = 200;   % Auswertepunkte entlang der Spline (Darstellung + mittlere Krümmung)
+
+% --- Ausreißerframes durch Nachbarn ersetzen (IDENTISCH zu kruemung_jinhan_v2_luca_batch.m) ---
+outlierWin     = 3;     % Nachbarn je Seite [Frames] (erkennt bis zu 3 Fehlframes am Stück)
+outlierNSigma  = 4;     % Schwelle in robusten Standardabweichungen der Nachbarn
+outlierMinJump = 0.15;  % Mindestabweichung vom Nachbar-Median [1/mm] (wie v16 absArtifactJump)
+kappaPhysMax   = 2;     % mittlere Krümmung darüber = immer Ausreißer [1/mm] (Radius < 0.5 mm)
 
 %% 1. Video auswählen (mit Default-Pfad)
 defaultPath = 'M:\nascas2\Projects\MemoryCI 2.0\1 Dokumentation\AP04_Aktivierungsparameter\3. Kurzimpulsaktivierung\Aktivierungsprogramm_v5\Testergebnisse';
@@ -208,7 +215,25 @@ end
 if pxPerMm == 1
     warning('pxPerMm = 1: Krümmung wird in 1/px statt 1/mm angezeigt - Kalibrierwert eintragen!');
 end
-mean_kappa_mm = [ImageData.mean_kappa].' * pxPerMm;   % 1/px -> 1/mm
+mean_kappa_raw_mm = [ImageData.mean_kappa].' * pxPerMm;   % 1/px -> 1/mm
+
+% Ausreißerframes (Fehlsegmentierung) durch ihre Nachbarn ersetzen
+[mean_kappa_mm, isOutlier] = replaceOutlierFrames(mean_kappa_raw_mm, tVec, ...
+    outlierWin, outlierNSigma, outlierMinJump, kappaPhysMax);
+for n = 1:ImageNummax
+    ImageData(n).isOutlier = isOutlier(n);
+end
+if any(isOutlier)
+    fprintf('Ersetzte Ausreisserframes: %d\n', nnz(isOutlier));
+    for i = find(isOutlier).'
+        fprintf('  Frame %4d: %10.4f -> %.4f 1/mm\n', i, mean_kappa_raw_mm(i), mean_kappa_mm(i));
+    end
+else
+    fprintf('Keine Ausreisserframes erkannt.\n');
+end
+
+iLast = find(isfinite(mean_kappa_mm), 1, 'last');   % letzter gültiger Frame
+if isempty(iLast), iLast = ImageNummax; end         % kein Frame auswertbar -> NaN-Ausgabe
 figure(2)
 plot(tVec, mean_kappa_mm, 'LineWidth', 2, 'Color', [0.8, 0.2, 0.6]);
 yline(kappaInlay, '--k', 'Inlay (Ziel)');
@@ -216,13 +241,14 @@ xlabel('Zeit [s]');
 ylabel('Mittlere Krümmung [1/mm]');
 title('Mittlere Krümmung über die Zeit');
 fprintf('max_kappa = %.4f 1/mm (Radius %.2f mm)\n', max(mean_kappa_mm), 1/max(mean_kappa_mm));
-fprintf('end_kappa = %.4f 1/mm (Radius %.2f mm)\n', mean_kappa_mm(end), 1/mean_kappa_mm(end));
+fprintf('end_kappa = %.4f 1/mm (Radius %.2f mm)\n', mean_kappa_mm(iLast), 1/mean_kappa_mm(iLast));
 fprintf('Inlay     = %.4f 1/mm (Radius %.2f mm)\n', kappaInlay, 1/kappaInlay);
 fprintf('Spline-Fit: mittlerer RMS-Abstand = %.2f px (max %.2f px)\n', ...
     mean([ImageData.fitRMS], 'omitnan'), max([ImageData.fitRMS]));
 
 %% 4b. Krümmung über Länge und Zeit (3D)
 sEnd = arrayfun(@(D) max(D.s), ImageData);   % Länge je Frame [px], NaN = ungültig
+sEnd(isOutlier) = NaN;                        % Ausreißerframes = Lücke im 3D-Plot
 if nnz(~isnan(sEnd)) < 2
     warning('Weniger als 2 gültige Frames - 3D-Plot wird übersprungen.');
 else
@@ -249,7 +275,7 @@ end
 
 %% 5. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 cmap = jet(256);
-allKappa = [ImageData.kappa];
+allKappa = [ImageData(~isOutlier).kappa];   % Farbskala ohne Ausreißerframes
 kMin = min(allKappa);            % min/max ignorieren NaN automatisch
 kMax = max(allKappa);
 if isempty(kMin) || ~isfinite(kMin) || ~(kMax > kMin)   % z.B. alle Frames NaN
@@ -287,14 +313,18 @@ function drawFrame(hAx, ImageData, n, cmap, kMin, kMax)
     imshow(ImageData(n).rgb, 'Parent', hAx);
     hold(hAx, 'on');
 
-    % Spline als eine Linie mit Farbverlauf nach Krümmung (patch-Trick:
-    % NaN am Ende verhindert das Schließen der Fläche)
-    patch(hAx, [ImageData(n).xs NaN], [ImageData(n).ys NaN], [ImageData(n).kappa NaN], ...
-        'EdgeColor', 'interp', 'FaceColor', 'none', 'LineWidth', 3);
-    colormap(hAx, cmap);
-    set(hAx, 'CLim', [kMin kMax]);
-
-    title(hAx, sprintf('Spline über Originalbild (Frame %d / %d)', n, numel(ImageData)));
+    if ImageData(n).isOutlier
+        % Ausreißerframe: Spline ausblenden
+        title(hAx, sprintf('Frame %d / %d: Ausreißer - ausgeblendet', n, numel(ImageData)));
+    else
+        % Spline als eine Linie mit Farbverlauf nach Krümmung (patch-Trick:
+        % NaN am Ende verhindert das Schließen der Fläche)
+        patch(hAx, [ImageData(n).xs NaN], [ImageData(n).ys NaN], [ImageData(n).kappa NaN], ...
+            'EdgeColor', 'interp', 'FaceColor', 'none', 'LineWidth', 3);
+        colormap(hAx, cmap);
+        set(hAx, 'CLim', [kMin kMax]);
+        title(hAx, sprintf('Spline über Originalbild (Frame %d / %d)', n, numel(ImageData)));
+    end
     hold(hAx, 'off');
 end
 
@@ -358,4 +388,52 @@ function dpp = ppDeriv(pp)
     [breaks, coefs, ~, order, dim] = unmkpp(pp);
     dcoefs = coefs(:, 1:order-1) .* (order-1:-1:1);
     dpp = mkpp(breaks, dcoefs, dim);
+end
+
+
+%% Lokale Funktion: Ausreißerframes erkennen und durch Nachbarn ersetzen
+% k = mittlere Krümmung je Frame [1/mm], tVec = Zeit je Frame [s].
+% Ausreißer, wenn
+%   (a) k > kappaPhysMax (physikalisch unmöglich) ODER
+%   (b) |k - Median der Nachbarn| > max(minJump, nSigma * 1.4826 * MAD der Nachbarn)
+%       (Nachbarn = gültige Frames in +-win, ohne den Frame selbst und ohne
+%        bereits markierte Ausreißer; bis zu 3 Durchläufe).
+% Echte schnelle Änderungen (Sprünge) bleiben erhalten, weil die Streuung der
+% Nachbarn dann groß ist. Ersetzt wird durch lineare Interpolation zwischen dem
+% nächsten gültigen Frame davor und danach (am Rand: nächster gültiger Wert).
+function [kClean, isOut] = replaceOutlierFrames(k, tVec, win, nSigma, minJump, kappaPhysMax)
+    k = k(:);  tVec = tVec(:);
+    kClean = k;
+    isOut  = isfinite(k) & k > kappaPhysMax;
+
+    for pass = 1:3
+        newOut = false(size(k));
+        for i = find(isfinite(k) & ~isOut).'
+            nb = [max(1, i-win):i-1, i+1:min(numel(k), i+win)];
+            nb = nb(isfinite(k(nb)) & ~isOut(nb));
+            if numel(nb) < 2
+                continue
+            end
+            med = median(k(nb));
+            sig = 1.4826 * median(abs(k(nb) - med));
+            if abs(k(i) - med) > max(minJump, nSigma * sig)
+                newOut(i) = true;
+            end
+        end
+        if ~any(newOut)
+            break
+        end
+        isOut = isOut | newOut;
+    end
+
+    good = isfinite(k) & ~isOut;
+    if nnz(good) >= 2
+        kClean(isOut) = interp1(tVec(good), k(good), tVec(isOut), 'linear');
+        atEdge = isOut & isnan(kClean);            % vor erstem / nach letztem gültigen Frame
+        kClean(atEdge) = interp1(tVec(good), k(good), tVec(atEdge), 'nearest', 'extrap');
+    elseif nnz(good) == 1
+        kClean(isOut) = k(good);
+    else
+        kClean(isOut) = NaN;
+    end
 end

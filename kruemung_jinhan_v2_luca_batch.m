@@ -6,6 +6,8 @@
 % Krümmungsberechnung pro Frame IDENTISCH zu kruemung_jinhan_v2_luca.m:
 %   SAM-2-Maske -> bereinigen -> Skelett -> Startpunkt nachverfolgen ->
 %   Bogenlänge -> Least-Squares-Spline -> Krümmung analytisch -> Mittelwert.
+%   Danach werden Ausreißerframes (Fehlsegmentierung) durch ihre Nachbarn
+%   ersetzt, bevor Max/End/Zeitpunkt bestimmt werden.
 %   (Details: README_kruemung_jinhan_v2.md)
 %
 % Batch/Excel-Logik übernommen aus kruemmung_jinhan_v16_batch_skip_excel.m:
@@ -32,6 +34,12 @@ pxPerMm = 43;          % Kalibrierung der Videos [px/mm]
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
 nParamIter  = 3;     % Fußpunkt-Iterationen (orthogonaler Abstand Punkt <-> Spline)
 Neval       = 200;   % Auswertepunkte entlang der Spline (mittlere Krümmung)
+
+% --- Ausreißerframes durch Nachbarn ersetzen (IDENTISCH zu kruemung_jinhan_v2_luca.m) ---
+outlierWin     = 3;     % Nachbarn je Seite [Frames] (erkennt bis zu 3 Fehlframes am Stück)
+outlierNSigma  = 4;     % Schwelle in robusten Standardabweichungen der Nachbarn
+outlierMinJump = 0.15;  % Mindestabweichung vom Nachbar-Median [1/mm] (wie v16 absArtifactJump)
+kappaPhysMax   = 2;     % mittlere Krümmung darüber = immer Ausreißer [1/mm] (Radius < 0.5 mm)
 
 % --- Excel-Export ---
 excelFile = "";                  % leer = Datei zu Beginn auswählen; oder festen Pfad eintragen
@@ -143,8 +151,20 @@ for batchIdx = 1:numel(videoList)
             end
         end
 
-        % --- Kennwerte des Videos ---
-        meanKappa_mm = meanKappa_px * pxPerMm;   % 1/px -> 1/mm
+        % --- Ausreißerframes durch Nachbarn ersetzen ---
+        meanKappaRaw_mm = meanKappa_px * pxPerMm;   % 1/px -> 1/mm
+        [meanKappa_mm, isOut] = replaceOutlierFrames(meanKappaRaw_mm, tVec, ...
+            outlierWin, outlierNSigma, outlierMinJump, kappaPhysMax);
+        if any(isOut)
+            fprintf('Ersetzte Ausreisserframes: %d\n', nnz(isOut));
+            for i = find(isOut).'
+                fprintf('  Frame %4d: %10.4f -> %.4f 1/mm\n', i, meanKappaRaw_mm(i), meanKappa_mm(i));
+            end
+        else
+            fprintf('Keine Ausreisserframes erkannt.\n');
+        end
+
+        % --- Kennwerte des Videos (aus der bereinigten Reihe) ---
         iLast = find(isfinite(meanKappa_mm), 1, 'last');
         if isempty(iLast)
             error('Kein Frame auswertbar.');
@@ -475,6 +495,54 @@ function v = cellToNum(x)
         v = str2double(strrep(string(x), ',', '.'));
     else
         v = NaN;
+    end
+end
+
+
+%% Lokale Funktion: Ausreißerframes erkennen und durch Nachbarn ersetzen
+% k = mittlere Krümmung je Frame [1/mm], tVec = Zeit je Frame [s].
+% Ausreißer, wenn
+%   (a) k > kappaPhysMax (physikalisch unmöglich) ODER
+%   (b) |k - Median der Nachbarn| > max(minJump, nSigma * 1.4826 * MAD der Nachbarn)
+%       (Nachbarn = gültige Frames in +-win, ohne den Frame selbst und ohne
+%        bereits markierte Ausreißer; bis zu 3 Durchläufe).
+% Echte schnelle Änderungen (Sprünge) bleiben erhalten, weil die Streuung der
+% Nachbarn dann groß ist. Ersetzt wird durch lineare Interpolation zwischen dem
+% nächsten gültigen Frame davor und danach (am Rand: nächster gültiger Wert).
+function [kClean, isOut] = replaceOutlierFrames(k, tVec, win, nSigma, minJump, kappaPhysMax)
+    k = k(:);  tVec = tVec(:);
+    kClean = k;
+    isOut  = isfinite(k) & k > kappaPhysMax;
+
+    for pass = 1:3
+        newOut = false(size(k));
+        for i = find(isfinite(k) & ~isOut).'
+            nb = [max(1, i-win):i-1, i+1:min(numel(k), i+win)];
+            nb = nb(isfinite(k(nb)) & ~isOut(nb));
+            if numel(nb) < 2
+                continue
+            end
+            med = median(k(nb));
+            sig = 1.4826 * median(abs(k(nb) - med));
+            if abs(k(i) - med) > max(minJump, nSigma * sig)
+                newOut(i) = true;
+            end
+        end
+        if ~any(newOut)
+            break
+        end
+        isOut = isOut | newOut;
+    end
+
+    good = isfinite(k) & ~isOut;
+    if nnz(good) >= 2
+        kClean(isOut) = interp1(tVec(good), k(good), tVec(isOut), 'linear');
+        atEdge = isOut & isnan(kClean);            % vor erstem / nach letztem gültigen Frame
+        kClean(atEdge) = interp1(tVec(good), k(good), tVec(atEdge), 'nearest', 'extrap');
+    elseif nnz(good) == 1
+        kClean(isOut) = k(good);
+    else
+        kClean(isOut) = NaN;
     end
 end
 

@@ -47,6 +47,10 @@ flowchart TD
 | `knotSpacing` | `40` | Knotenabstand der Spline [px]. Größer heißt glatter, kleiner heißt detailreicher, aber verrauschter. |
 | `nParamIter` | `3` | Anzahl der Fußpunkt-Iterationen beim Spline-Fit (Abschnitt 3.7). `0` ordnet die Pixel nur über die Bogenlänge zu. |
 | `Neval` | `200` | Anzahl der Auswertepunkte entlang der Spline je Frame. |
+| `outlierWin` | `3` | Ausreißer-Erkennung: Anzahl der Nachbarframes je Seite (Abschnitt 3.10). |
+| `outlierNSigma` | `4` | Ausreißer-Erkennung: Schwelle in robusten Standardabweichungen der Nachbarn. |
+| `outlierMinJump` | `0.15` | Ausreißer-Erkennung: Mindestabweichung vom Median der Nachbarn [1/mm]. |
+| `kappaPhysMax` | `2` | Mittlere Krümmung, ab der ein Frame immer als Ausreißer gilt [1/mm]. |
 
 Diese Werte stehen fest im Code: `bwareaopen(…, 300)`, `gapCloseRadius = 1`
 und `bwskel(…, 'MinBranchLength', 25)`.
@@ -204,6 +208,50 @@ Ist ein Frame nicht auswertbar (keine Fläche, kein Skelett, weniger als 4
 Skelettpunkte), werden die Werte mit `NaN` gefüllt und es erscheint eine
 `warning`. Das Skript läuft dann weiter.
 
+### 3.10 Ausreißerframes durch Nachbarn ersetzen (`replaceOutlierFrames`)
+
+Nach der Schleife liegt für jeden Frame eine mittlere Krümmung vor. Einzelne
+Frames können dabei völlig falsche Werte haben, z. B. wenn die Maske nur ein
+winziges Drahtstück enthält und die Spline sich dadurch extrem krümmt. In
+einem Datensatz traten so Werte bis über 8000 1/mm auf. Solche Frames würden
+das Maximum bestimmen.
+
+Ein Frame gilt deshalb als **Ausreißer**, wenn eine dieser Bedingungen zutrifft:
+
+1. **Physikalisch unmöglich:** Die mittlere Krümmung ist größer als
+   `kappaPhysMax` = 2 1/mm. Das entspricht einem mittleren Radius unter
+   0,5 mm, wie die Grenze `Rmin_physMin` im v16-Skript.
+2. **Weicht stark von den Nachbarn ab:** Verglichen wird mit den gültigen
+   Frames in ±`outlierWin` = 3 Frames, ohne den Frame selbst:
+
+   $$
+   \lvert \kappa_i - \operatorname{median}(\text{Nachbarn}) \rvert
+   > \max\bigl(\texttt{outlierMinJump},\ \texttt{outlierNSigma} \cdot 1{,}4826 \cdot \text{MAD}(\text{Nachbarn})\bigr)
+   $$
+
+   mit `outlierMinJump` = 0,15 1/mm (wie `absArtifactJump` im v16-Skript) und
+   `outlierNSigma` = 4. Die Prüfung läuft bis zu dreimal, damit auch mehrere
+   Fehlframes hintereinander erkannt werden.
+
+Ausreißer werden **durch ihre Nachbarn ersetzt**, und zwar durch lineare
+Interpolation über die Zeit zwischen dem nächsten gültigen Frame davor und
+danach. Am Anfang oder Ende des Videos wird der nächste gültige Wert
+übernommen. In der Konsole steht für jeden ersetzten Frame der alte und der
+neue Wert.
+
+**Was erhalten bleibt (getestet):**
+- echte Sprünge, z. B. von 0,20 auf 0,35 1/mm innerhalb eines Frames
+- ein kurzer echter Peak, z. B. +0,08 1/mm über 3 Frames
+
+Bei einem Sprung ist die Streuung der Nachbarn groß, deshalb greift das
+Kriterium dort nicht.
+
+**Grenzen:**
+- Ab 4 Fehlframes hintereinander unter 2 1/mm wertet das Skript die Werte als
+  echtes Plateau und ersetzt sie nicht.
+- Ein echter Peak, der nur einen einzigen Frame dauert und mehr als 0,15 1/mm
+  über seinen Nachbarn liegt, würde ebenfalls ersetzt.
+
 ---
 
 ## 4. Plots und Ausgaben
@@ -222,7 +270,8 @@ wenn im Dialog „Anzeigen“ gewählt wurde.
 
 ### `figure(2)`: Mittlere Krümmung über der Zeit
 
-- Die Kurve zeigt `mean_kappa` jedes Frames in **1/mm** über der Zeit in s.
+- Die Kurve zeigt `mean_kappa` jedes Frames in **1/mm** über der Zeit in s,
+  nach der Ausreißer-Ersetzung (Abschnitt 3.10).
 - Die gestrichelte Linie **„Inlay (Ziel)“** liegt bei `kappaInlay`, der
   mittleren Krümmung der Inlay-Form. Erreicht die Kurve diese Linie, ist der
   Draht im Mittel so stark gekrümmt wie das Inlay.
@@ -234,6 +283,7 @@ wenn im Dialog „Anzeigen“ gewählt wurde.
 - Alle Frames werden per `interp1` auf eine **gemeinsame Längsachse** von 0 bis
   zur größten gemessenen Länge gelegt. Ist der Draht in einem Frame kürzer,
   bleibt dahinter eine Lücke (`NaN`).
+- Ausreißerframes erscheinen als Lücke.
 - Der Plot ist mit der Maus drehbar. Mit `view(2)` siehst du ihn von oben als
   Heatmap. Darin erkennt man gut, **wo** und **wann** sich der Draht biegt.
 
@@ -242,11 +292,14 @@ wenn im Dialog „Anzeigen“ gewählt wurde.
 Das Originalbild jedes Frames, darüber die Spline als farbige Linie (jet,
 blau = schwach, rot = stark gekrümmt). Mit dem Slider blätterst du durch die
 Frames. Die Farbskala reicht von der kleinsten bis zur größten Krümmung im
-ganzen Video.
+ganzen Video, ohne Ausreißerframes. Bei einem Ausreißerframe wird keine Linie
+gezeichnet, und der Titel zeigt „Ausreißer – ausgeblendet“.
 
 ### Konsolenausgabe
 
-- größte und letzte mittlere Krümmung in 1/mm, jeweils mit Radius in mm
+- die ersetzten Ausreißerframes mit altem und neuem Wert
+- größte und letzte mittlere Krümmung in 1/mm, jeweils mit Radius in mm, nach
+  der Ausreißer-Ersetzung
 - die Inlay-Referenz
 - der mittlere und der größte `fitRMS` über alle Frames
 - eine Warnung, solange `pxPerMm = 1` gesetzt ist
@@ -311,7 +364,10 @@ schreibt das Skript pro Video drei Kennwerte in die Testlisten-Excel.
 4. Ist Spalte **Z** dieser Zeile schon gefüllt, wird das Video **übersprungen**,
    ohne es auszuwerten. So kann man einen abgebrochenen Lauf einfach neu
    starten.
-5. Alle Masken auswerten und daraus die Kennwerte bilden (siehe Tabelle).
+5. Alle Masken auswerten, **Ausreißerframes durch ihre Nachbarn ersetzen**
+   (Abschnitt 3.10, gleiche Parameter wie im Einzelskript) und daraus die
+   Kennwerte bilden (siehe Tabelle). Die ersetzten Frames stehen in der
+   Konsole.
 6. Die Kennwerte eintragen. Es werden **nur leere Zellen** beschrieben, Z kommt
    zuletzt.
 
