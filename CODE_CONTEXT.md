@@ -209,6 +209,21 @@ zeigt die mittlere Krümmung **absolut in 1/mm** (`[ImageData.mean_kappa] * pxPe
 
 ---
 
+## `kruemung_jinhan_v2_luca_rect.m` — wie v2, mit Ausschluss-Rechteck
+
+**Zweck:** Kopie von `kruemung_jinhan_v2_luca.m` (Stand inkl. Ausreißer-Ersetzung).
+Zusätzlich nach dem Dialog „Maskenkontrolle“ (Abschnitt 2c): erster Frame des
+Videos wird angezeigt, mit `drawrectangle` ein Rechteck ziehen, Doppelklick
+(`wait`) bestätigt; Fenster schließen = kein Rechteck. Das Rechteck wird zur
+`excludeMask` (Videopixel, auf Bildgrenzen begrenzt); in **jedem Frame** wird
+die SAM-2-Maske dort direkt nach `imread` auf `false` gesetzt (vor „größte
+Fläche“) → dort wird nicht skelettiert. Hat die Maske eine andere Auflösung
+als das Video, wird `excludeMask` per `imresize(…,'nearest')` angepasst. Im
+Slider-Fenster ist das Rechteck rot gestrichelt eingezeichnet (`drawFrame` hat
+den zusätzlichen Parameter `excludeRect`). Sonst identisch zu v2.
+
+---
+
 ## `kruemung_jinhan_v2_luca_batch.m` — Batch-Version mit Excel-Export
 
 **Zweck:** alle `.avi` eines Ordners mit der **identischen** Spline-Krümmung wie

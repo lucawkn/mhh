@@ -385,3 +385,27 @@ Es entstehen keine Plots, und die RGB-Frames werden nicht geladen.
 
 **Ausgabe am Ende:** wie viele Videos ausgewertet, übersprungen oder
 fehlgeschlagen sind, jeweils mit Namen.
+
+---
+
+## 8. Variante mit Ausschluss-Rechteck: `kruemung_jinhan_v2_luca_rect.m`
+
+Diese Variante rechnet genau wie `kruemung_jinhan_v2_luca.m`, mit einem
+zusätzlichen Schritt vor der Auswertung:
+
+1. Nach dem Dialog „Maskenkontrolle“ erscheint der **erste Frame des Videos**.
+2. Du ziehst mit der Maus ein **Rechteck**. Es lässt sich noch verschieben und
+   in der Größe ändern. Ein **Doppelklick ins Rechteck** bestätigt es. Schließt
+   du das Fenster, ohne zu bestätigen, wird kein Rechteck verwendet.
+3. In **allen Frames** wird die SAM-2-Maske innerhalb des Rechtecks auf schwarz
+   gesetzt, so als wäre dort kein Draht. Das passiert direkt nach dem Laden der
+   Maske. Dort entstehen also weder Skelett noch Krümmungswerte.
+4. Im Slider-Fenster ist das Rechteck rot gestrichelt eingezeichnet.
+
+Typischer Einsatz: Halter, Einspannung oder Spiegelungen, die SAM 2
+fälschlich zum Draht zählt.
+
+**Hinweis Startpunkt:** Schneidet das Rechteck den Draht ab, entsteht an der
+Rechteckkante ein neues Drahtende. Der Startpunkt (Länge = 0) wird weiterhin
+als das Ende gewählt, das dem **Bildrand** am nächsten liegt (Abschnitt 3.5).
+
