@@ -28,7 +28,7 @@
 % (siehe README_SAM2.md).
 clear; clc; close all;
 
-pxPerMm = 43;          % Kalibrierung der Videos [px/mm]
+pxPerMm = 19.7;        % Kalibrierung der Videos [px/mm]
 
 % --- Parameter Spline-Fit (IDENTISCH zu kruemung_jinhan_v2_luca.m halten!) ---
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher

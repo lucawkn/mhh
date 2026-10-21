@@ -97,7 +97,7 @@ Neval       = 200;   % Auswertepunkte entlang der Spline
 % WICHTIG: echten Kalibrierwert eintragen! Krümmung ist 1/Länge und skaliert
 % mit dem Maßstab; außerdem ist knotSpacing in px angegeben -> ohne richtigen
 % Maßstab glättet die Spline die Inlay-Geometrie falsch stark.
-pxPerMm = 1;
+pxPerMm = 19.7;
 
 % Geometrie in den Pixel-Maßstab des Videos bringen (mm -> px)
 X = lx(:) * pxPerMm;

@@ -42,8 +42,8 @@ flowchart TD
 
 | Parameter | Standard | Bedeutung |
 |---|---|---|
-| `pxPerMm` | `1` | Kalibrierung des Videos [px/mm]. **Muss eingetragen werden**, sonst sind die Werte in 1/px statt 1/mm. Messen z. B. mit `imdistline` an einer bekannten Länge im Frame. |
-| `kappaInlay` | `0.4252` | Mittlere Krümmung des Inlays [1/mm], exakt aus der Geometrie (`inlayGeometry_v2.m`). Wird nur als Referenzlinie geplottet. |
+| `pxPerMm` | `19.7` | Kalibrierung des Videos [px/mm]. Muss zur Kameraeinstellung passen; bei `1` sind die Werte in 1/px statt 1/mm. Messen z. B. mit `imdistline` an einer bekannten Länge im Frame. |
+| `kappaInlay` | `0.2320` | Referenz-Krümmung des Inlays [1/mm]. Wird nur als Referenzlinie geplottet. (Die exakte mittlere Krümmung der Geometrie in `inlayGeometry_v2.m` ist 0,4252 1/mm.) |
 | `knotSpacing` | `40` | Knotenabstand der Spline [px]. Größer heißt glatter, kleiner heißt detailreicher, aber verrauschter. |
 | `nParamIter` | `3` | Anzahl der Fußpunkt-Iterationen beim Spline-Fit (Abschnitt 3.7). `0` ordnet die Pixel nur über die Bogenlänge zu. |
 | `Neval` | `200` | Anzahl der Auswertepunkte entlang der Spline je Frame. |
@@ -380,7 +380,7 @@ schreibt das Skript pro Video drei Kennwerte in die Testlisten-Excel.
 
 Die Spalten M:V gehören dem v16-Skript und werden nicht angefasst.
 
-**Feste Einstellungen:** `pxPerMm = 43`. Die Bildrate kommt aus der Videodatei.
+**Feste Einstellungen:** `pxPerMm = 19.7`. Die Bildrate kommt aus der Videodatei.
 Es entstehen keine Plots, und die RGB-Frames werden nicht geladen.
 
 **Ausgabe am Ende:** wie viele Videos ausgewertet, übersprungen oder

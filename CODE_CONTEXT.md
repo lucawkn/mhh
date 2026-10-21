@@ -203,8 +203,8 @@ lokal ~7 % in der Drahtmitte, an den Enden größer), `nParamIter=3`, `Neval=200
 **Keine Normierung mehr:** Die Spline-Krümmung ist ein echter Messwert. `figure(2)`
 zeigt die mittlere Krümmung **absolut in 1/mm** (`[ImageData.mean_kappa] * pxPerMm`;
 `ImageData` bleibt intern in 1/px) mit gestrichelter Referenzlinie `kappaInlay`
-(= exakte mittlere Inlay-Krümmung 0.4252 1/mm, Radius ≈ 2.35 mm, aus
-`inlayGeometry_v2.m`). Ausgabe max./End-Krümmung in 1/mm + Radius.
+(aktuell 0.2320 1/mm; die exakte mittlere Krümmung der Inlay-Geometrie aus
+`inlayGeometry_v2.m` wäre 0.4252 1/mm); `pxPerMm = 19.7`. Ausgabe max./End-Krümmung in 1/mm + Radius.
 `pxPerMm` (Kalibrierung des Videos) muss eingetragen werden; bei `1` → Warnung.
 
 ---
@@ -242,7 +242,7 @@ Batch-/Excel-Logik übernommen aus dem Nutzer-Skript
   Max [s], **Z = Video-Datei = Abschlussmarker** (zuletzt geschrieben). Zeilen
   mit gefülltem Z werden vor der Auswertung übersprungen; nur leere Zellen
   werden beschrieben; Header in W:Z der Headerzeile nur, wo leer.
-- `pxPerMm = 43`, Bildrate aus dem Video (`v.FrameRate`); keine Plots, keine
+- `pxPerMm = 19.7`, Bildrate aus dem Video (`v.FrameRate`); keine Plots, keine
   RGB-Frames; `try/catch` pro Video + Zusammenfassung am Ende.
 - Vor Max/End/Zeitpunkt werden Ausreißerframes durch Nachbarn ersetzt
   (`replaceOutlierFrames`, gleiche Parameter und Funktion wie im Einzelskript).

@@ -26,10 +26,9 @@
 %   Schritt 2: dieses Skript ausführen (lädt die PNGs statt createMask).
 clear; clc; close all;
 
-pxPerMm    = 1;        % Kalibrierung des Videos [px/mm] - ECHTEN Wert eintragen!
+pxPerMm    = 19.7;     % Kalibrierung des Videos [px/mm]
                        % (z.B. mit imdistline eine bekannte Länge im Frame messen)
-kappaInlay = 0.4252;   % mittlere Inlay-Krümmung [1/mm] (exakt aus der Geometrie,
-                       % siehe inlayGeometry_v2.m) -> Referenzlinie im Plot
+kappaInlay = 0.2320;   % Referenz-Krümmung des Inlays [1/mm] -> Referenzlinie im Plot
 
 % --- Parameter Spline-Fit ---
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
