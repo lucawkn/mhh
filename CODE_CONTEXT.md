@@ -308,7 +308,9 @@ Werte in 1/px und 1/mm.
   (z.B. bei `pxPerMm=1`: Inlay nur ~16 px lang).
 - Gibt zusätzlich die **exakte** mittlere Krümmung aus
   (`Σ Bogenwinkel / Gesamtlänge`; Gerade κ=0, Bögen κ=1/r) und plottet den
-  Krümmungsverlauf Spline vs. exakt. Test (Octave, `pxPerMm=30`): Spline
+  Krümmungsverlauf Spline vs. exakt. Gibt außerdem die **Länge des Inlays**
+  aus (Gerade 2,5 mm + 6 Bögen = 13,508 mm, gesamt 16,008 mm; = `windowLen_mm`
+  13.51 im v16-Skript). Test (Octave, `pxPerMm=30`): Spline
   0.0145 vs. exakt 0.0142 1/px.
 
 ---

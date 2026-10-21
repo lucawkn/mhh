@@ -135,6 +135,16 @@ fprintf('Mittlere Krümmung Spline:            %.4f 1/px = %.4f 1/mm\n', meanKap
 fprintf('Mittlere Krümmung exakt (Geometrie): %.4f 1/px = %.4f 1/mm  (= kappaInlay in kruemung_jinhan_v2_luca.m)\n', ...
     meanKappaExact, meanKappaExact*pxPerMm);
 
+% --- Länge des Inlays (exakt aus der Geometrie) ---
+segLen_mm = segLen / pxPerMm;                      % Segmentlängen [mm]
+fprintf('\nLänge des Inlays (exakt aus der Geometrie):\n');
+fprintf('  %-22s: %7.3f mm\n', 'Gerade Einlaufstrecke', segLen_mm(1));
+for i = 1:numel(r)
+    fprintf('  %-22s: %7.3f mm\n', sprintf('Bogen %d (r = %.1f mm)', i, r(i)), segLen_mm(i+1));
+end
+fprintf('  %-22s: %7.3f mm\n', sprintf('Summe der %d Bögen', numel(r)), sum(segLen_mm(2:end)));
+fprintf('  %-22s: %7.3f mm (= %.1f px)\n', 'GESAMTLÄNGE', sum(segLen_mm), sum(segLen));
+
 % --- Spline im Geometrie-Plot (in mm-Koordinaten für die Anzeige) ---
 hold on;
 plot(xs/pxPerMm, ys/pxPerMm, 'r-', 'LineWidth', 1.5);
