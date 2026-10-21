@@ -13,6 +13,7 @@
 % 3. Ausreißerframes (Fehlsegmentierung) durch ihre Nachbarn ersetzen und die
 %    mittlere Krümmung über die Zeit plotten (absolut in 1/mm, mit der
 %    mittleren Krümmung der Sollform über dasselbe Fenster als Referenzlinie)
+%    Zusätzlich Ausschnitt nur für den wichtigen Zeitbereich (zoomTime_s)
 % 4. 3D-Plot: Krümmung über Abstand von der Spitze (mm) und Zeit
 % 5. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 %
@@ -40,6 +41,9 @@ knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleine
 nParamIter  = 3;     % Fußpunkt-Iterationen (0 = Punkte nur über Bogenlänge zuordnen,
                      % >0 = echter orthogonaler Abstand Punkt <-> Spline wird minimiert)
 Neval       = 200;   % Auswertepunkte entlang der Spline (Darstellung + mittlere Krümmung)
+
+% --- Zeitausschnitt für den Detail-Plot ---
+zoomTime_s = [1.5 2.0];   % besonders wichtiger Zeitbereich [s] (Beginn, Ende)
 
 % --- Ausreißerframes durch Nachbarn ersetzen (IDENTISCH zu kruemung_jinhan_v2_luca_batch.m) ---
 outlierWin     = 3;     % Nachbarn je Seite [Frames] (erkennt bis zu 3 Fehlframes am Stück)
@@ -259,6 +263,37 @@ fprintf('Inlay     = %.4f 1/mm (Radius %.2f mm), Sollform über %.2f mm ab Spitz
     kappaInlay, 1/kappaInlay, windowLen_mm);
 fprintf('Spline-Fit: mittlerer RMS-Abstand = %.2f px (max %.2f px)\n', ...
     mean([ImageData.fitRMS], 'omitnan'), max([ImageData.fitRMS]));
+
+%% 4a. Detail-Plot: mittlere Krümmung nur im Zeitbereich zoomTime_s
+inZoom = tVec >= zoomTime_s(1) & tVec <= zoomTime_s(2);
+if ~any(inZoom)
+    warning('Keine Frames zwischen %.2f s und %.2f s - Detail-Plot wird übersprungen.', ...
+        zoomTime_s(1), zoomTime_s(2));
+else
+    figure(4)
+    plot(tVec(inZoom), mean_kappa_mm(inZoom), 'o-', 'LineWidth', 2, ...
+        'Color', [0.8, 0.2, 0.6], 'MarkerFaceColor', [0.8, 0.2, 0.6], 'DisplayName', 'mittlere Krümmung');
+    hold on;
+    zoomOut = inZoom & isOutlier;            % ersetzte Ausreißerframes kennzeichnen
+    if any(zoomOut)
+        plot(tVec(zoomOut), mean_kappa_mm(zoomOut), 'kx', 'MarkerSize', 10, 'LineWidth', 2, ...
+            'DisplayName', 'Ausreißer (ersetzt)');
+    end
+    yline(kappaInlay, '--k', 'Inlay (Ziel)', 'HandleVisibility', 'off');
+    hold off;
+    xlim(zoomTime_s);
+    grid on;
+    xlabel('Zeit [s]');
+    ylabel('Mittlere Krümmung [1/mm]');
+    title(sprintf('Mittlere Krümmung %.2f - %.2f s (%.2f mm ab Spitze)', ...
+        zoomTime_s(1), zoomTime_s(2), windowLen_mm));
+    legend('Location', 'best');
+
+    [kZoomMax, iZoomMax] = max(mean_kappa_mm(inZoom), [], 'omitnan');
+    tZoom = tVec(inZoom);
+    fprintf('Zeitbereich %.2f-%.2f s: %d Frames, max %.4f 1/mm bei t = %.3f s\n', ...
+        zoomTime_s(1), zoomTime_s(2), nnz(inZoom), kZoomMax, tZoom(iZoomMax));
+end
 
 %% 4b. Krümmung über Länge und Zeit (3D)
 sEnd = arrayfun(@(D) max(D.s), ImageData);   % Länge je Frame [px], NaN = ungültig

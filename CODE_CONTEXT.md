@@ -183,6 +183,9 @@ Maske über Skelett, Spline-Fit und Krümmung bis zu den Plots).
   Endpunkt am nächsten zum Bildrand (eingespanntes Ende), danach Endpunkt am
   nächsten zu `prevStart` (Startpunkt des Vorframes). `ImageData(n).s` =
   Bogenlänge ab Startpunkt [px].
+- **`figure(4)`: Detail-Plot** der (bereinigten) mittleren Krümmung nur im
+  Zeitbereich `zoomTime_s = [1.5 2.0]` s (Punkte je Frame, ersetzte Ausreißer
+  als x, Inlay-Linie); Konsole: Frames im Bereich + Max mit Zeitpunkt.
 - **Auswertefenster ab der Spitze** (`tipWindowCurvature`): Spline wird über
   den ganzen sichtbaren Draht gefittet, ausgewertet aber nur `windowLen_mm =
   13.51` mm (Bogenlänge der 6 Soll-Bögen) ab der Spitze (= Spline-Ende fern vom

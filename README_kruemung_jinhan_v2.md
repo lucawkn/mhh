@@ -48,6 +48,7 @@ flowchart TD
 | `knotSpacing` | `40` | Knotenabstand der Spline [px]. Größer heißt glatter, kleiner heißt detailreicher, aber verrauschter. |
 | `nParamIter` | `3` | Anzahl der Fußpunkt-Iterationen beim Spline-Fit (Abschnitt 3.7). `0` ordnet die Pixel nur über die Bogenlänge zu. |
 | `Neval` | `200` | Anzahl der Auswertepunkte entlang der Spline je Frame. |
+| `zoomTime_s` | `[1.5 2.0]` | Zeitbereich [s] für den Detail-Plot `figure(4)`. |
 | `outlierWin` | `3` | Ausreißer-Erkennung: Anzahl der Nachbarframes je Seite (Abschnitt 3.10). |
 | `outlierNSigma` | `4` | Ausreißer-Erkennung: Schwelle in robusten Standardabweichungen der Nachbarn. |
 | `outlierMinJump` | `0.15` | Ausreißer-Erkennung: Mindestabweichung vom Median der Nachbarn [1/mm]. |
@@ -308,6 +309,17 @@ wenn im Dialog „Anzeigen“ gewählt wurde.
 - Die gestrichelte Linie **„Inlay (Ziel)“** liegt bei `kappaInlay`, der
   mittleren Krümmung der Inlay-Form. Erreicht die Kurve diese Linie, ist der
   Draht im Mittel so stark gekrümmt wie das Inlay.
+
+### `figure(4)`: Detail-Ausschnitt 1,5–2,0 s
+
+- Dieselbe mittlere Krümmung wie in `figure(2)`, aber **nur die Frames im
+  Zeitbereich `zoomTime_s`** (Standard 1,5–2,0 s). Jeder Frame ist als Punkt
+  markiert.
+- Ersetzte Ausreißerframes sind mit einem schwarzen **x** gekennzeichnet.
+- Die gestrichelte Linie ist wieder die Inlay-Referenz.
+- In der Konsole stehen die Anzahl der Frames im Bereich sowie die größte
+  mittlere Krümmung dort mit Zeitpunkt.
+- Den Zeitbereich änderst du oben im Skript über `zoomTime_s = [Beginn Ende]`.
 
 ### `figure(3)`: Krümmung über Länge und Zeit (3D)
 
