@@ -43,7 +43,8 @@ flowchart TD
 | Parameter | Standard | Bedeutung |
 |---|---|---|
 | `pxPerMm` | `19.7` | Kalibrierung des Videos [px/mm]. Muss zur Kameraeinstellung passen; bei `1` sind die Werte in 1/px statt 1/mm. Messen z. B. mit `imdistline` an einer bekannten Länge im Frame. |
-| `kappaInlay` | `0.2320` | Referenz-Krümmung des Inlays [1/mm]. Wird nur als Referenzlinie geplottet. (Die exakte mittlere Krümmung der Geometrie in `inlayGeometry_v2.m` ist 0,4252 1/mm.) |
+| `windowLen_mm` | `13.51` | Ausgewertete Länge ab der Spitze [mm] = Bogenlänge der 6 Soll-Bögen (Abschnitt 3.8b). |
+| `kappaInlay` | automatisch | Mittlere Krümmung der Sollform über dasselbe Fenster ab der Spitze, aus der Geometrie berechnet (`inlayWindowKappa`): 0,5038 1/mm bei 13,51 mm. Wird nur als Referenzlinie geplottet. |
 | `knotSpacing` | `40` | Knotenabstand der Spline [px]. Größer heißt glatter, kleiner heißt detailreicher, aber verrauschter. |
 | `nParamIter` | `3` | Anzahl der Fußpunkt-Iterationen beim Spline-Fit (Abschnitt 3.7). `0` ordnet die Pixel nur über die Bogenlänge zu. |
 | `Neval` | `200` | Anzahl der Auswertepunkte entlang der Spline je Frame. |
@@ -191,6 +192,38 @@ $$
   Weil die Punkte gleichmäßig entlang der Länge verteilt sind, ist das der
   Mittelwert über die Bogenlänge.
 
+### 3.8b Auswertefenster fester Länge ab der Spitze (`tipWindowCurvature`)
+
+Die mittlere Krümmung hängt davon ab, über welche Länge gemittelt wird. Der
+gerade Teil am eingespannten Ende hat fast keine Krümmung. Je mehr davon im
+Bild ist, desto kleiner wird der Mittelwert, auch wenn sich die Spitze gleich
+stark krümmt. Damit Videos und Zeitpunkte vergleichbar sind, wertet das Skript
+deshalb **immer dieselbe Länge ab der Spitze** aus:
+
+- **Spitze** ist das Spline-Ende, das am weitesten vom Startpunkt (dem
+  eingespannten Ende, Abschnitt 3.5) entfernt ist, also das freie, gekrümmte
+  Ende.
+- **Fensterlänge:** `windowLen_mm` = 13,51 mm. Das ist die Bogenlänge der 6
+  gekrümmten Abschnitte der Sollform, ohne die gerade Einlaufstrecke (siehe
+  Längenausgabe von `inlayGeometry_v2.m`).
+- **Länge entlang der glatten Spline gemessen:** Die Weglänge über die
+  Skelettpixel ist wegen der Pixeltreppe bei schrägem Draht deutlich zu lang,
+  im Test 15–25 %. Das Skript wertet die Spline deshalb dicht aus und summiert
+  die echte Bogenlänge auf. Im Test lag sie auf ≈ 0,1 mm genau.
+- Die `Neval` = 200 Auswertepunkte liegen **gleichmäßig in Bogenlänge**
+  zwischen der Spitze und 13,51 mm davor. Der Mittelwert ist damit der
+  Mittelwert über genau dieses Stück.
+- **Zu kurz:** Ist der sichtbare Draht kürzer als das Fenster, wird der Frame
+  mit `NaN` gefüllt, und es erscheint eine Warnung.
+- **Referenzlinie:** `kappaInlay` ist die mittlere Krümmung der Sollform über
+  genau dasselbe Fenster ab der Spitze, berechnet aus der Geometrie
+  (`inlayWindowKappa`).
+
+**Test** an künstlichen Drähten (Gerade plus Kreisbogen, auf Pixel gerundet,
+19,7 px/mm): mittlere Krümmung 1–3 % genau. Wenn das Fenster den Knick zwischen
+Gerade und Bogen enthält, ist der Fehler relativ größer, absolut aber nur
+≈ 0,01 1/mm.
+
 ### 3.9 Gespeicherte Daten (`ImageData(n)`)
 
 | Feld | Inhalt |
@@ -198,10 +231,10 @@ $$
 | `rgb` | Originalbild des Frames |
 | `bw` | bereinigte Maske |
 | `skel` | Skelett |
-| `xs`, `ys` | Spline-Punkte (200) in Bildkoordinaten [px] |
-| `s` | Bogenlänge dieser Punkte ab dem Startpunkt [px] |
+| `xs`, `ys` | Spline-Punkte (200) im Fenster ab der Spitze, in Bildkoordinaten [px] |
+| `s` | Abstand dieser Punkte von der Spitze, entlang der Spline [px] |
 | `kappa` | Krümmung an diesen Punkten [1/px] |
-| `mean_kappa` | mittlere Krümmung des Frames [1/px] |
+| `mean_kappa` | mittlere Krümmung im Fenster ab der Spitze [1/px] |
 | `fitRMS` | RMS-Abstand Skelettpixel ↔ Spline [px] |
 
 Ist ein Frame nicht auswertbar (keine Fläche, kein Skelett, weniger als 4
@@ -278,11 +311,10 @@ wenn im Dialog „Anzeigen“ gewählt wurde.
 
 ### `figure(3)`: Krümmung über Länge und Zeit (3D)
 
-- Achsen: Zeit [s], Länge ab Startpunkt [mm] und Krümmung [1/mm]. Die
-  Krümmung ist zusätzlich farbcodiert.
-- Alle Frames werden per `interp1` auf eine **gemeinsame Längsachse** von 0 bis
-  zur größten gemessenen Länge gelegt. Ist der Draht in einem Frame kürzer,
-  bleibt dahinter eine Lücke (`NaN`).
+- Achsen: Zeit [s], **Abstand von der Spitze** [mm] (0 bis 13,51 mm) und
+  Krümmung [1/mm]. Die Krümmung ist zusätzlich farbcodiert.
+- Alle Frames haben dasselbe Fenster. Frames, die zu kurz sind, erscheinen als
+  Lücke (`NaN`).
 - Ausreißerframes erscheinen als Lücke.
 - Der Plot ist mit der Maus drehbar. Mit `view(2)` siehst du ihn von oben als
   Heatmap. Darin erkennt man gut, **wo** und **wann** sich der Draht biegt.

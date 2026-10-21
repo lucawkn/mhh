@@ -7,10 +7,13 @@
 %    Least-Squares-Spline approximiert (Abstand Punkte <-> Spline minimal),
 %    die Krümmung wird dann ANALYTISCH aus den Spline-Ableitungen berechnet
 %    (kein Rauschen durch numerisches Differenzieren der Pixelpunkte).
+%    Ausgewertet wird nur ein Fenster FESTER LÄNGE (windowLen_mm) ab der
+%    Spitze (freies, gekrümmtes Ende) -> Mittelwerte unabhängig davon, wie
+%    viel vom Draht sichtbar ist. Zu kurze Frames -> NaN.
 % 3. Ausreißerframes (Fehlsegmentierung) durch ihre Nachbarn ersetzen und die
 %    mittlere Krümmung über die Zeit plotten (absolut in 1/mm, mit der
-%    mittleren Inlay-Krümmung als Referenzlinie = Zielform)
-% 4. 3D-Plot: Krümmung über Länge (mm ab Startpunkt) und Zeit
+%    mittleren Krümmung der Sollform über dasselbe Fenster als Referenzlinie)
+% 4. 3D-Plot: Krümmung über Abstand von der Spitze (mm) und Zeit
 % 5. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 %
 % WICHTIG - zweistufiger Workflow (die HSV-Maske aus kruemung_hai.m schlägt
@@ -25,7 +28,12 @@ clear; clc; close all;
 
 pxPerMm    = 19.7;     % Kalibrierung des Videos [px/mm]
                        % (z.B. mit imdistline eine bekannte Länge im Frame messen)
-kappaInlay = 0.2320;   % Referenz-Krümmung des Inlays [1/mm] -> Referenzlinie im Plot
+
+% --- Auswertefenster ab der Spitze ---
+windowLen_mm = 13.51;  % ausgewertete Länge ab der Spitze [mm] = Bogenlänge der 6 Soll-Bögen
+                       % (siehe Längenausgabe in inlayGeometry_v2.m; wie windowLen_mm in v16)
+kappaInlay = inlayWindowKappa(windowLen_mm);   % mittlere Krümmung der Sollform über dasselbe
+                                               % Fenster [1/mm] -> Referenzlinie im Plot
 
 % --- Parameter Spline-Fit ---
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
@@ -182,9 +190,15 @@ for n = 1:ImageNummax
                 % Least-Squares-Spline durch alle Skelettpixel (Parameter = Bogenlänge)
                 [ppx, ppy, fitRMS] = fitSplineLSQ(d, xx, yy, knotSpacing, nParamIter);
 
-                % Spline fein und gleichmäßig auswerten, Krümmung analytisch
-                s = linspace(ppx.breaks(1), ppx.breaks(end), Neval);
-                [xs, ys, kappa] = splineCurvature(ppx, ppy, s);
+                % Nur das Fenster fester Länge ab der Spitze auswerten
+                % (gleichmäßig in Bogenlänge), Krümmung analytisch
+                [xs, ys, kappa, s, L_px] = tipWindowCurvature(ppx, ppy, ...
+                    windowLen_mm * pxPerMm, Neval);
+                if isnan(kappa(1))
+                    s = nan(1, Neval);
+                    warning('Frame %d: sichtbare Länge %.2f mm < Fenster %.2f mm - wird mit NaN gefüllt.', ...
+                        n, L_px / pxPerMm, windowLen_mm);
+                end
             else
                 warning('Frame %d: zu wenige Skelettpunkte (<4) - wird mit NaN gefüllt.', n);
             end
@@ -203,7 +217,7 @@ for n = 1:ImageNummax
     ImageData(n).xs = xs;
     ImageData(n).ys = ys;
     ImageData(n).kappa = kappa;
-    ImageData(n).s = s;                   % Bogenlänge ab Startpunkt [px]
+    ImageData(n).s = s;                   % Abstand von der Spitze [px] (Fenster)
     ImageData(n).mean_kappa = mean(kappa, 'omitnan');
     ImageData(n).fitRMS = fitRMS;         % RMS-Abstand Skelettpixel <-> Spline [px]
     ImageData(n).path = videoFullPath;
@@ -238,10 +252,11 @@ plot(tVec, mean_kappa_mm, 'LineWidth', 2, 'Color', [0.8, 0.2, 0.6]);
 yline(kappaInlay, '--k', 'Inlay (Ziel)');
 xlabel('Zeit [s]');
 ylabel('Mittlere Krümmung [1/mm]');
-title('Mittlere Krümmung über die Zeit');
+title(sprintf('Mittlere Krümmung über die Zeit (%.2f mm ab Spitze)', windowLen_mm));
 fprintf('max_kappa = %.4f 1/mm (Radius %.2f mm)\n', max(mean_kappa_mm), 1/max(mean_kappa_mm));
 fprintf('end_kappa = %.4f 1/mm (Radius %.2f mm)\n', mean_kappa_mm(iLast), 1/mean_kappa_mm(iLast));
-fprintf('Inlay     = %.4f 1/mm (Radius %.2f mm)\n', kappaInlay, 1/kappaInlay);
+fprintf('Inlay     = %.4f 1/mm (Radius %.2f mm), Sollform über %.2f mm ab Spitze\n', ...
+    kappaInlay, 1/kappaInlay, windowLen_mm);
 fprintf('Spline-Fit: mittlerer RMS-Abstand = %.2f px (max %.2f px)\n', ...
     mean([ImageData.fitRMS], 'omitnan'), max([ImageData.fitRMS]));
 
@@ -265,7 +280,7 @@ else
     colormap(jet);
     colorbar;
     xlabel('Zeit [s]');
-    ylabel('Länge ab Startpunkt [mm]');
+    ylabel('Abstand von der Spitze [mm]');
     zlabel('Krümmung [1/mm]');
     title('Krümmung über Länge und Zeit (von oben: view(2) = Heatmap)');
     view(3);
@@ -435,4 +450,63 @@ function [kClean, isOut] = replaceOutlierFrames(k, tVec, win, nSigma, minJump, k
     else
         kClean(isOut) = NaN;
     end
+end
+
+
+%% Lokale Funktion: Krümmung in einem Fenster fester Länge ab der Spitze
+% Die Spitze ist das Spline-Ende, das am weitesten vom Startpunkt (eingespanntes
+% Ende) entfernt ist. Die Länge wird ENTLANG DER GLATTEN SPLINE gemessen (nicht
+% über die Pixelkette, die bei schrägem Draht durch die Treppe länger ist).
+% Rückgabe an Neval Punkten, gleichmäßig in Bogenlänge: Position, Krümmung [1/px],
+% Abstand von der Spitze sTip [px] und sichtbare Spline-Länge L [px].
+% Ist der sichtbare Draht kürzer als winLen, sind xs/ys/kappa NaN.
+function [xs, ys, kappa, sTip, L] = tipWindowCurvature(ppx, ppy, winLen, Neval)
+    tDense = linspace(ppx.breaks(1), ppx.breaks(end), 2000);
+    arc = [0, cumsum(hypot(diff(ppval(ppx, tDense)), diff(ppval(ppy, tDense))))];
+    L = arc(end);
+    sTip = linspace(0, winLen, Neval);   % Abstand von der Spitze [px]
+
+    if L < winLen
+        xs = nan(1, Neval);  ys = nan(1, Neval);  kappa = nan(1, Neval);
+        return
+    end
+
+    [arc, iu] = unique(arc);             % streng monoton für interp1
+    t = interp1(arc, tDense(iu), L - sTip);   % Kurvenparameter der Auswertepunkte
+    [xs, ys, kappa] = splineCurvature(ppx, ppy, t);
+end
+
+
+%% Lokale Funktion: Referenz-Krümmung der Inlay-Sollform über das Fenster ab der Spitze
+% Sollform TB01Lv01 (Geometrie wie inlayGeometry_v2.m): gerade Einlaufstrecke
+% (kappa = 0) + 6 Kreisbögen (kappa = 1/r). Rückgabe: mittlere Krümmung [1/mm]
+% über die letzten windowLen_mm ab der Spitze (Ende des 6. Bogens).
+function kRef = inlayWindowKappa(windowLen_mm)
+    p = [0,0; 2.5,0; 4.7,0.589; 5.505,3.595; 2.637,4.363; 2.014,3.741; 2.527,1.829; 3.827,1.829];
+    r = [4.4, 2.2, 2.1, 1.7, 1.4, 1.3]';
+
+    arcAngle = zeros(size(r));
+    for n = 2:size(p,1)-1
+        d = norm(p(n+1,:) - p(n,:));
+        c = (p(n+1,:)' + p(n,:)')/2 + sqrt(r(n-1)^2 - d^2/4)/d*[0,-1;1,0]*(p(n+1,:)' - p(n,:)');
+        a = atan2(p(n,2) - c(2), p(n,1) - c(1));
+        b = atan2(p(n+1,2) - c(2), p(n+1,1) - c(1));
+        arcAngle(n-1) = mod(b - a, 2*pi);
+    end
+    segLen   = [norm(p(2,:) - p(1,:)); r .* arcAngle];   % Gerade + 6 Bögen [mm]
+    segKappa = [0; 1 ./ r];                               % [1/mm]
+
+    % Von der Spitze aus rückwärts über windowLen_mm integrieren
+    L = min(windowLen_mm, sum(segLen));
+    remaining = L;
+    integral  = 0;
+    for i = numel(segLen):-1:1
+        take = min(segLen(i), remaining);
+        integral  = integral + segKappa(i) * take;
+        remaining = remaining - take;
+        if remaining <= 0
+            break
+        end
+    end
+    kRef = integral / L;
 end

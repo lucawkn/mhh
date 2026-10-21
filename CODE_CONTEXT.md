@@ -183,9 +183,18 @@ Maske über Skelett, Spline-Fit und Krümmung bis zu den Plots).
   Endpunkt am nächsten zum Bildrand (eingespanntes Ende), danach Endpunkt am
   nächsten zu `prevStart` (Startpunkt des Vorframes). `ImageData(n).s` =
   Bogenlänge ab Startpunkt [px].
+- **Auswertefenster ab der Spitze** (`tipWindowCurvature`): Spline wird über
+  den ganzen sichtbaren Draht gefittet, ausgewertet aber nur `windowLen_mm =
+  13.51` mm (Bogenlänge der 6 Soll-Bögen) ab der Spitze (= Spline-Ende fern vom
+  Startpunkt). Länge über die echte Spline-Bogenlänge (dichte Auswertung,
+  `cumsum`), nicht über die Pixelkette (diese ist im Test 15–25 % zu lang);
+  `Neval` Punkte gleichmäßig in Bogenlänge. Sichtbar < Fenster → NaN + Warnung.
+  `ImageData(n).s` = Abstand von der Spitze [px]. `kappaInlay` wird automatisch
+  aus der Sollform über dasselbe Fenster berechnet (`inlayWindowKappa`,
+  0.5038 1/mm bei 13.51 mm). Nur im Einzelskript; Batch/Rect noch ohne Fenster.
 - **`figure(3)`: 3D-Plot κ(Länge, Zeit)** per `surf`: gemeinsame Längsachse
-  `sGrid` in mm (0 … größte Länge), pro Frame `interp1` von `kappa` (in 1/mm)
-  auf `sGrid`, kürzere Frames → NaN (Lücke). Von oben (`view(2)`) = Heatmap.
+  `sGrid` in mm (0 … `windowLen_mm`, Abstand von der Spitze), pro Frame
+  `interp1` von `kappa` (in 1/mm) auf `sGrid`, ungültige Frames → NaN (Lücke). Von oben (`view(2)`) = Heatmap.
   Achtung: an den Drahtenden ist die Spline-Krümmung ungenauer (Ausreißer möglich).
 - **Ausreißerframes** (`replaceOutlierFrames`, auf der Zeitreihe der mittleren
   Krümmung in 1/mm): Ausreißer, wenn > `kappaPhysMax=2` 1/mm oder wenn die
