@@ -121,6 +121,14 @@ dieses Skript starten.
    mittleren/max. `fitRMS`.
 8. `figure(2)`: mittlere Krümmung über eindeutige Temperaturen (normiert,
    NaN-sicher via `accumarray`).
+8b. **`figure(3)`: As / Af** per stückweise-linearer 3-Segment-Regression
+   (`fitPlateauRampPlateau`, identisch aus `tip_track_matching_spline.m`) auf
+   der Kurve aus `figure(2)` in % des Maximums. Feste Randwerte c1/c2 =
+   gemessenes Anfangs-/Endniveau (Median der ersten/letzten 3 Temperaturen,
+   statt 0/100 % wie beim Tip-Fortschritt, da Restkrümmung im kalten Zustand);
+   Bereich in 1-°C-Schritten bis −25 / 90 °C mit c1/c2 aufgefüllt.
+   `As = x1`, `Af = x2`, Konsolenausgabe inkl. R². Test (synthetisch):
+   ±0,3 °C.
 9. `figure` mit **Slider** (`uicontrol` + `addlistener` auf `Value`/`PostSet`):
    farbige Krümmungsdarstellung (jet-Colormap) über dem Graustufenbild, lokale
    Funktion `drawFrame` (Spline als ein `patch` mit Farbverlauf).

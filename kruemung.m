@@ -9,7 +9,9 @@
 %    README_kruemung_jinhan_v2.md Abschnitt 3.7/3.8).
 %    Ausgewertet wird nur ein Fenster FESTER LÄNGE (windowLen_mm) ab der
 %    Spitze = dem Drahtende nächst der Bildecke unten rechts. Zu kurze Bilder -> NaN.
-% 3. Mittlere Krümmung über die Temperatur (aus Dateinamen) plotten
+% 3. Mittlere Krümmung über die Temperatur (aus Dateinamen) plotten und die
+%    Aktivierungstemperaturen As / Af per stückweise-linearer 3-Segment-
+%    Regression bestimmen (wie tip_track_matching_spline.m)
 % 4. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 %
 % WICHTIG - zweistufiger Workflow (Segmentierung mit Segment Anything Model 2,
@@ -206,6 +208,52 @@ ylabel('Mittlere Krümmung');
 title(sprintf('Mittlere Krümmung abhängig von Temperatur (%.2f mm ab Spitze)', windowLen_mm));
 fprintf('Spline-Fit: mittlerer RMS-Abstand = %.2f px (max %.2f px)\n', ...
     mean([ImageData.fitRMS], 'omitnan'), max([ImageData.fitRMS]));
+
+%% 4b. Aktivierungstemperaturen As / Af (stückweise-lineare 3-Segment-Regression)
+% Wie in tip_track_matching_spline.m (fitPlateauRampPlateau): drei lineare
+% Segmente, Knickstellen x1 = As und x2 = Af. Unterschied: Der Tip-Fortschritt
+% läuft per Definition von 0 bis 100 %, die Krümmung nicht (Restkrümmung im
+% kalten Zustand). Feste Randwerte c1/c2 sind deshalb das gemessene Anfangs- und
+% Endniveau (Median der ersten/letzten nEdge Temperaturen); damit wird der
+% Bereich wie im Tip-Skript in 1-°C-Schritten bis -25 °C / 90 °C aufgefüllt.
+nEdge = 3;
+validFit = isfinite(Tu) & isfinite(kappaMean);
+Tfit = Tu(validFit);
+Kfit = kappaMean(validFit) * 100;              % mittlere Krümmung [% des Maximums]
+if numel(Tfit) < 6
+    warning('Zu wenige Temperaturen (%d) für die As/Af-Regression - übersprungen.', numel(Tfit));
+else
+    c1 = median(Kfit(1:nEdge));                % Anfangsniveau
+    c2 = median(Kfit(end-nEdge+1:end));        % Endniveau
+    nLo = max(0, ceil(Tfit(1) + 25));          % Auffüllen bis -25 °C
+    nHi = max(0, ceil(90 - Tfit(end)));        % Auffüllen bis 90 °C
+    Tfit = [Tfit(1) - (nLo:-1:1).'; Tfit; Tfit(end) + (1:nHi).'];
+    Kfit = [repmat(c1, nLo, 1); Kfit; repmat(c2, nHi, 1)];
+
+    [paramsA, predictFcn] = fitPlateauRampPlateau(Tfit, Kfit, c1, c2);
+    As = paramsA.x1;
+    Af = paramsA.x2;
+
+    figure(3)
+    plot(Tfit, Kfit, 'LineWidth', 2, 'Color', [0.8 0.2 0.6], 'LineStyle', '--', ...
+        'DisplayName', 'Messung (aufgefüllt bis -25 / 90 °C)');
+    hold on;
+    plot(Tfit, predictFcn(Tfit), 'LineWidth', 2, 'Color', [0.2 0.8 0.6], ...
+        'DisplayName', '3-Segment-Fit');
+    xline(As, ':k', sprintf('A_s = %.1f °C', As), 'HandleVisibility', 'off');
+    xline(Af, ':k', sprintf('A_f = %.1f °C', Af), 'HandleVisibility', 'off');
+    hold off;
+    grid on;
+    xlabel('Temperatur [°C]');
+    ylabel('Mittlere Krümmung [% des Maximums]');
+    title(sprintf('Aktivierungstemperaturen: A_s = %.1f °C, A_f = %.1f °C (R^2 = %.3f)', ...
+        As, Af, paramsA.r2));
+    legend('Location', 'best');
+
+    fprintf('As = %.4f\n', As);
+    fprintf('Af = %.4f\n', Af);
+    fprintf('3-Segment-Fit: R^2 = %.4f, Randwerte %.1f %% / %.1f %%\n', paramsA.r2, c1, c2);
+end
 
 %% 5. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 cmap = jet(256);
@@ -415,4 +463,102 @@ function [xs, ys, kappa, sTip, L] = tipWindowCurvature(ppx, ppy, winLen, Neval)
     [arc, iu] = unique(arc);             % streng monoton für interp1
     t = interp1(arc, tDense(iu), sTip);       % Kurvenparameter der Auswertepunkte
     [xs, ys, kappa] = splineCurvature(ppx, ppy, t);
+end
+
+
+%% Lokale Funktion: stueckweise-lineare 3-Segment-Regression
+function [params, predictFcn] = fitPlateauRampPlateau(x, y, c1, c2)
+%FITPLATEAURAMPPLATEAU  Stueckweise-lineare 3-Segment-Regression mit festen Randwerten.
+%   Fittet eine STETIGE, stueckweise lineare Funktion mit DREI linearen
+%   Segmenten an die Daten (x,y). Alle drei Segmente duerfen eine Steigung
+%   haben; festgehalten werden nur die Randwerte: f(xmin) = c1 und
+%   f(xmax) = c2 (Default: c1 = 0, c2 = 100).
+%
+%   Das Modell verlaeuft linear durch die Stuetzpunkte
+%       (xmin, c1) - (x1, y1) - (x2, y2) - (xmax, c2)
+%   mit den Knickstellen x1 < x2 und den freien Knickwerten y1, y2.
+%   Bei festen Knickstellen sind y1, y2 per linearer Ausgleichsrechnung
+%   exakt loesbar; optimiert werden daher nur die Knickstellen x1 < x2.
+%
+%   [params, predictFcn] = fitPlateauRampPlateau(x, y)        % c1=0, c2=100
+%   [params, predictFcn] = fitPlateauRampPlateau(x, y, c1, c2)
+%     params     : struct mit c1, c2, x1, x2, y1, y2, m1, m2, m3, sse, r2
+%     predictFcn : Function-Handle, predictFcn(xq) -> Modellwerte
+
+    if nargin < 3 || isempty(c1), c1 = 0;   end
+    if nargin < 4 || isempty(c2), c2 = 100; end
+
+    x = x(:);  y = y(:);
+    xmin = min(x);  xmax = max(x);
+
+    % --- 1) Grobe globale Suche ueber die Knickstellen (Grid) -----------
+    % Fuer feste (x1,x2) werden die optimalen Knickwerte (y1,y2) intern per
+    % linearer Ausgleichsrechnung bestimmt -> SSE direkt minimal bewertet.
+    ng   = 80;
+    cand = linspace(xmin, xmax, ng);
+    bestSSE = inf;  bx1 = cand(2);  bx2 = cand(end-1);
+    for i = 2:ng-1
+        for j = i+1:ng-1                      % erzwingt xmin < x1 < x2 < xmax
+            sse = sseFixed(x, y, cand(i), cand(j), xmin, xmax, c1, c2);
+            if sse < bestSSE
+                bestSSE = sse;  bx1 = cand(i);  bx2 = cand(j);
+            end
+        end
+    end
+
+    % --- 2) Lokale Verfeinerung (Reparam. x1, w = x2-x1 > 0) ------------
+    obj  = @(p) objective(p, x, y, xmin, xmax, c1, c2);
+    p0   = [bx1, bx2 - bx1];
+    opts = optimset('TolX',1e-9, 'TolFun',1e-11, ...
+                    'MaxFunEvals',4000, 'MaxIter',4000);
+    popt = fminsearch(obj, p0, opts);
+    x1 = popt(1);  x2 = popt(1) + popt(2);
+
+    % --- 3) Optimale Knickwerte und abgeleitete Groessen ---------------
+    [sse, y1, y2] = sseFixed(x, y, x1, x2, xmin, xmax, c1, c2);
+    m1  = (y1 - c1) / (x1 - xmin);   % Steigung Segment 1
+    m2  = (y2 - y1) / (x2 - x1);     % Steigung Segment 2 (Rampe)
+    m3  = (c2 - y2) / (xmax - x2);   % Steigung Segment 3
+    sst = sum((y - mean(y)).^2);
+    r2  = 1 - sse/sst;
+
+    params = struct('c1',c1, 'c2',c2, 'x1',x1, 'x2',x2, ...
+                    'y1',y1, 'y2',y2, 'm1',m1, 'm2',m2, 'm3',m3, ...
+                    'sse',sse, 'r2',r2);
+
+    predictFcn = @(xq) modelEval(xq, xmin, xmax, x1, x2, c1, c2, y1, y2);
+end
+
+% ----------------------------------------------------------------------
+function yhat = modelEval(x, xmin, xmax, x1, x2, c1, c2, y1, y2)
+% Modellauswertung: lineare Interpolation durch die vier Stuetzpunkte.
+    x  = x(:);
+    xk = [xmin, x1, x2, xmax];
+    yk = [c1,   y1, y2, c2  ];
+    yhat = interp1(xk, yk, x, 'linear', 'extrap');
+end
+
+function [sse, y1, y2] = sseFixed(x, y, x1, x2, xmin, xmax, c1, c2)
+% Optimale Knickwerte y1,y2 (lineare Ausgleichsrechnung) bei festen
+% Knickstellen und festen Randwerten c1,c2 sowie zugehoeriger SSE.
+    xk   = [xmin, x1, x2, xmax];
+    b    = interp1(xk, [0 1 0 0], x, 'linear', 'extrap');   % Basisfkt. fuer y1
+    d    = interp1(xk, [0 0 1 0], x, 'linear', 'extrap');   % Basisfkt. fuer y2
+    base = interp1(xk, [c1 0 0 c2], x, 'linear', 'extrap'); % fester Randanteil
+    A    = [b, d];
+    yk   = A \ (y - base);            % LS-Loesung [y1; y2]
+    y1   = yk(1);  y2 = yk(2);
+    resid = y - (base + A*yk);
+    sse   = resid.' * resid;
+end
+
+function val = objective(p, x, y, xmin, xmax, c1, c2)
+% Zielfunktion fuer fminsearch: SSE ueber (x1, w), mit Penalty ausserhalb.
+    x1 = p(1);  w = p(2);
+    x2 = x1 + w;
+    eps0 = 1e-6 * (xmax - xmin);
+    if w <= eps0 || x1 <= xmin + eps0 || x2 >= xmax - eps0
+        val = 1e12;  return;          % ungueltiger Bereich
+    end
+    val = sseFixed(x, y, x1, x2, xmin, xmax, c1, c2);
 end
