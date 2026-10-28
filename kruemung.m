@@ -28,7 +28,7 @@ clear; clc; close all;
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
 nParamIter  = 3;     % Fußpunkt-Iterationen (orthogonaler Abstand Punkt <-> Spline)
 Neval       = 200;   % Auswertepunkte entlang der Spline (Darstellung + mittlere Krümmung)
-pxPerMm     = 19.7;  % Maßstab der Bilder [px/mm] (z.B. mit imdistline am Lineal messen)
+pxPerMm     = 46.6;  % Maßstab der Bilder [px/mm] (mit imdistline am Lineal gemessen)
 windowLen_mm = 13.51; % ausgewertete Länge ab der Spitze [mm] = Bogenlänge der 6 Soll-Bögen
 maxFitRMS   = 2;     % Fit-Qualität: mittlerer Abstand Skelettpixel <-> Spline darüber [px]
                      % -> Frame nicht auswertbar (NaN), normal sind ~0.3-0.5 px

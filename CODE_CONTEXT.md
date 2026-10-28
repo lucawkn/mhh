@@ -105,8 +105,8 @@ dieses Skript starten.
    geradeste Fortsetzung der letzten ~8 Pixel. Warnungen: < 90 % der
    Skelettpixel abgelaufen; Weg endet > 15 px vom Ecken-Ende entfernt.
    **Fenster** `windowLen_mm = 13.51` ab der Spitze (`tipWindowCurvature`, wie
-   Video-Skripte), `pxPerMm = 19.7` (für die JPGs noch zu prüfen: Lineal-Striche
-   ≈ 47 px auseinander); sichtbarer Draht < Fenster → NaN. Grund: Sortieren nach `bwdistgeodesic` mischt bei einer
+   Video-Skripte), `pxPerMm = 46.6` (am Lineal
+   der JPG-Bilder gemessen; Videos: 19.7); sichtbarer Draht < Fenster → NaN. Grund: Sortieren nach `bwdistgeodesic` mischt bei einer
    Schleife (Spitze berührt beim Einrollen den Draht → Maske verschmilzt) beide
    Seiten der Schleife (Sprünge bis ~200 px) → fitRMS 40–60 px, mittlere
    Krümmung bis 13× zu hoch, Spitzen im Temperatur-Plot (27–33 °C). Zusätzlich
