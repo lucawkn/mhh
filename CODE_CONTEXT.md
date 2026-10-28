@@ -95,19 +95,25 @@ dieses Skript starten.
 5. **Drahtauswahl:** die Komponente mit der **größten `MajorAxisLength`**
    (nicht größte Fläche!) wird als Draht gewählt — robust gegen runde
    Luftblasen, die mehr Fläche haben können.
-6. Skelettieren (`bwskel`, `MinBranchLength=25`), Endpunkt finden,
-   `bwdistgeodesic` für die Bogenlänge, `unique(d)` für streng monotone
-   Stützstellen (sonst `interp1`-Fehler), `interp1` auf `N=20` gleichverteilte
-   Punkte, glätten, Krümmung `kappa = |x'y'' − y'x''| / (x'²+y'²)^1.5`.
-7. NaN-Guards: Frames mit < 2 Skelettpunkten / ohne Komponente werden mit NaN
-   gefüllt (kein Absturz).
+6. Skelettieren (`bwskel`, `MinBranchLength=25`), Endpunkt `ex(1)` (für den
+   Mittelwert über den ganzen Draht egal), `bwdistgeodesic` für die
+   Bogenlänge, `unique(d)`. **Krümmung per Least-Squares-Spline** wie
+   `kruemung_jinhan_v2_luca.m` (`fitSplineLSQ` durch alle Skelettpixel,
+   `knotSpacing=40` px, `nParamIter=3`; `splineCurvature` analytisch an
+   `Neval=200` Punkten; Funktionen identisch kopiert). Mittelwert über den
+   ganzen sichtbaren Draht (kein Fenster ab der Spitze). Früher: `interp1` auf
+   `N=20` Punkte + Glättung + `gradient`.
+7. NaN-Guards: Frames mit < 4 Skelettpunkten / ohne Komponente werden mit NaN
+   gefüllt (kein Absturz). `ImageData(n).fitRMS` + Konsolenausgabe des
+   mittleren/max. `fitRMS`.
 8. `figure(2)`: mittlere Krümmung über eindeutige Temperaturen (normiert,
    NaN-sicher via `accumarray`).
 9. `figure` mit **Slider** (`uicontrol` + `addlistener` auf `Value`/`PostSet`):
    farbige Krümmungsdarstellung (jet-Colormap) über dem Graustufenbild, lokale
-   Funktion `drawFrame`.
+   Funktion `drawFrame` (Spline als ein `patch` mit Farbverlauf).
 
-**Wichtige Parameter:** `gapCloseRadius=1`, `N=20`.
+**Wichtige Parameter:** `gapCloseRadius=1`, `knotSpacing=40` px, `nParamIter=3`,
+`Neval=200`.
 
 **Gelöste Probleme:** `interp1`-Fehler (→ `unique(d)` + NaN-Guards);
 Draht/Blasen-Unterscheidung (→ `MajorAxisLength`). Die frühere
