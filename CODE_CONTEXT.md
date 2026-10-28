@@ -95,11 +95,18 @@ dieses Skript starten.
 5. **Drahtauswahl:** die Komponente mit der **größten `MajorAxisLength`**
    (nicht größte Fläche!) wird als Draht gewählt — robust gegen runde
    Luftblasen, die mehr Fläche haben können.
-6. Skelettieren (`bwskel`, `MinBranchLength=25`), Endpunkt `ex(1)` (für den
-   Mittelwert über den ganzen Draht egal). **Reihenfolge der Skelettpixel per
-   `orderSkeletonPath`**: Skelett ab `ex(1)` pixelweise ablaufen, an
-   Verzweigungen geradeste Fortsetzung der letzten ~8 Pixel; Parameter =
-   kumulierte Weglänge. Grund: Sortieren nach `bwdistgeodesic` mischt bei einer
+6. Skelettieren (`bwskel`, `MinBranchLength=25`). **Spitze = Endpunkt nächst
+   der Bildecke unten rechts**; abgelaufen wird vom Endpunkt am weitesten von
+   dieser Ecke (eingespanntes Ende), danach Reihenfolge umgedreht → Länge 0 =
+   Spitze (funktioniert auch, wenn die Spitze den Draht berührt und kein
+   eigenes Skelett-Ende hat). **`orderSkeletonPath`** läuft das Skelett
+   pixelweise ab; an Verzweigungen wird jeder Weg probeweise abgelaufen und der
+   **längste** gewählt (Seitenäste z.B. an Luftblasen), bei Gleichstand die
+   geradeste Fortsetzung der letzten ~8 Pixel. Warnungen: < 90 % der
+   Skelettpixel abgelaufen; Weg endet > 15 px vom Ecken-Ende entfernt.
+   **Fenster** `windowLen_mm = 13.51` ab der Spitze (`tipWindowCurvature`, wie
+   Video-Skripte), `pxPerMm = 19.7` (für die JPGs noch zu prüfen: Lineal-Striche
+   ≈ 47 px auseinander); sichtbarer Draht < Fenster → NaN. Grund: Sortieren nach `bwdistgeodesic` mischt bei einer
    Schleife (Spitze berührt beim Einrollen den Draht → Maske verschmilzt) beide
    Seiten der Schleife (Sprünge bis ~200 px) → fitRMS 40–60 px, mittlere
    Krümmung bis 13× zu hoch, Spitzen im Temperatur-Plot (27–33 °C). Zusätzlich

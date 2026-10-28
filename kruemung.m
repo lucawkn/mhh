@@ -6,7 +6,9 @@
 %    ALLE Skelettpixel (nach Bogenlänge sortiert) werden mit einer kubischen
 %    Least-Squares-Spline approximiert, die Krümmung wird ANALYTISCH aus den
 %    Spline-Ableitungen berechnet (wie kruemung_jinhan_v2_luca.m, siehe
-%    README_kruemung_jinhan_v2.md Abschnitt 3.7/3.8)
+%    README_kruemung_jinhan_v2.md Abschnitt 3.7/3.8).
+%    Ausgewertet wird nur ein Fenster FESTER LÄNGE (windowLen_mm) ab der
+%    Spitze = dem Drahtende nächst der Bildecke unten rechts. Zu kurze Bilder -> NaN.
 % 3. Mittlere Krümmung über die Temperatur (aus Dateinamen) plotten
 % 4. Farbliche Krümmungsdarstellung über dem Originalbild (mit Slider)
 %
@@ -26,6 +28,8 @@ clear; clc; close all;
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
 nParamIter  = 3;     % Fußpunkt-Iterationen (orthogonaler Abstand Punkt <-> Spline)
 Neval       = 200;   % Auswertepunkte entlang der Spline (Darstellung + mittlere Krümmung)
+pxPerMm     = 19.7;  % Maßstab der Bilder [px/mm] (z.B. mit imdistline am Lineal messen)
+windowLen_mm = 13.51; % ausgewertete Länge ab der Spitze [mm] = Bogenlänge der 6 Soll-Bögen
 maxFitRMS   = 2;     % Fit-Qualität: mittlerer Abstand Skelettpixel <-> Spline darüber [px]
                      % -> Frame nicht auswertbar (NaN), normal sind ~0.3-0.5 px
 
@@ -127,23 +131,38 @@ for n = 1:ImageNummax
         [yy, xx] = find(skel);
 
         if ~isempty(ex) && numel(yy) >= 2
-            x0 = ex(1); y0 = ey(1);
-
-            % Skelett ab (x0,y0) Pixel für Pixel in Drahtreihenfolge ablaufen
-            % (robust, wenn die Spitze den Draht berührt und eine Schleife entsteht)
-            [xx, yy] = orderSkeletonPath(skel, x0, y0);
-            d = [0; cumsum(hypot(diff(xx), diff(yy)))];   % Weglänge entlang des Skeletts [px]
-            if numel(xx) < 0.9 * numel(yy)
+            % Spitze = Endpunkt nächst der Bildecke unten rechts. Abgelaufen wird
+            % vom ANDEREN Ende (eingespannt, am weitesten von der Ecke): so endet
+            % der Weg auch dann an der Spitze, wenn sie beim Einrollen den Draht
+            % berührt und kein eigenes Skelett-Ende mehr hat (Schleife).
+            [H, W] = size(skel);
+            distCorner = hypot(W - ex, H - ey);
+            [~, iClamp] = max(distCorner);
+            [xx, yy] = orderSkeletonPath(skel, ex(iClamp), ey(iClamp));
+            if numel(xx) < 0.9 * nnz(skel)
                 warning('Frame %d: nur %d von %d Skelettpixeln abgelaufen.', n, numel(xx), nnz(skel));
             end
+            [~, iTip] = min(distCorner);
+            if numel(ex) >= 2 && hypot(xx(end) - ex(iTip), yy(end) - ey(iTip)) > 15
+                warning('Frame %d: Weg endet nicht am Ende nächst der Ecke unten rechts.', n);
+            end
+
+            % Reihenfolge umdrehen: Weg beginnt an der Spitze, Länge 0 = Spitze
+            xx = flipud(xx);  yy = flipud(yy);
+            d = [0; cumsum(hypot(diff(xx), diff(yy)))];   % Weglänge ab der Spitze [px]
 
             if numel(d) >= 4
                 % Least-Squares-Spline durch alle Skelettpixel (Parameter = Bogenlänge)
                 [ppx, ppy, fitRMS] = fitSplineLSQ(d, xx, yy, knotSpacing, nParamIter);
 
-                % Spline fein und gleichmäßig auswerten, Krümmung analytisch
-                s = linspace(ppx.breaks(1), ppx.breaks(end), Neval);
-                [xs, ys, kappa] = splineCurvature(ppx, ppy, s);
+                % Nur das Fenster fester Länge ab der Spitze auswerten
+                % (gleichmäßig in Bogenlänge), Krümmung analytisch
+                [xs, ys, kappa, ~, L_px] = tipWindowCurvature(ppx, ppy, ...
+                    windowLen_mm * pxPerMm, Neval);
+                if isnan(kappa(1))
+                    warning('Frame %d: sichtbare Länge %.2f mm < Fenster %.2f mm - wird mit NaN gefüllt.', ...
+                        n, L_px / pxPerMm, windowLen_mm);
+                end
 
                 if fitRMS > maxFitRMS   % Spline passt nicht zum Skelett -> nicht auswerten
                     warning('Frame %d: Spline-Fit schlecht (RMS %.1f px > %.1f px) - wird mit NaN gefüllt.', ...
@@ -184,7 +203,7 @@ figure(2)
 plot(Tu, kappaMean,'LineWidth',2,'Color',[0.8, 0.2, 0.6]);
 xlabel('Temperatur [°C]');
 ylabel('Mittlere Krümmung');
-title('Mittlere Krümmung abhängig von Temperatur');
+title(sprintf('Mittlere Krümmung abhängig von Temperatur (%.2f mm ab Spitze)', windowLen_mm));
 fprintf('Spline-Fit: mittlerer RMS-Abstand = %.2f px (max %.2f px)\n', ...
     mean([ImageData.fitRMS], 'omitnan'), max([ImageData.fitRMS]));
 
@@ -306,19 +325,22 @@ end
 
 %% Lokale Funktion: Skelett ab (x0,y0) Pixel für Pixel in Drahtreihenfolge ablaufen
 % Liefert die Skelettpixel in der Reihenfolge entlang des Drahts. An
-% Verzweigungen (z.B. wenn die Spitze beim Einrollen den Draht berührt und das
-% Skelett eine Schleife bildet) wird der Nachbar gewählt, der die Richtung der
-% letzten ~8 Pixel am geradesten fortsetzt. Ersetzt das Sortieren aller
+% Verzweigungen wird jeder mögliche Weg probeweise abgelaufen und der
+% LÄNGSTE gewählt (Seitenäste z.B. an Luftblasen sind Sackgassen); bei
+% gleicher Länge (z.B. Schleife, wenn die Spitze den Draht berührt) die
+% geradeste Fortsetzung der letzten ~8 Pixel. Ersetzt das Sortieren aller
 % Skelettpixel nach geodätischer Distanz: das mischt bei einer Schleife beide
-% Seiten der Schleife (Punktsprünge bis ~200 px) und lässt den Spline-Fit und
-% die Krümmung explodieren.
+% Seiten (Punktsprünge bis ~200 px) und lässt die Krümmung explodieren.
 function [xp, yp] = orderSkeletonPath(skel, x0, y0)
+    [xp, yp] = walkSkeleton(skel, false(size(skel)), x0, y0, true);
+end
+
+function [xp, yp] = walkSkeleton(skel, visited, x, y, lookahead)
     [H, W] = size(skel);
-    visited = false(H, W);
     nMax = nnz(skel);
     xp = zeros(nMax, 1);
     yp = zeros(nMax, 1);
-    x = x0;  y = y0;  k = 0;
+    k = 0;
     while true
         k = k + 1;
         xp(k) = x;  yp(k) = y;
@@ -340,15 +362,27 @@ function [xp, yp] = orderSkeletonPath(skel, x0, y0)
         end
 
         if size(cand, 1) > 1
-            % geradeste Fortsetzung der bisherigen Richtung (letzte ~8 Pixel)
+            % Geradheit: Fortsetzung der Richtung der letzten ~8 Pixel
             j = max(1, k - 8);
             dirv = [x - xp(j), y - yp(j)];
             if all(dirv == 0)
                 dirv = cand(1, :) - [x y];
             end
             step  = cand - [x y];
-            score = (step * dirv.') ./ sqrt(sum(step.^2, 2));
-            [~, iBest] = max(score);
+            score = (step * dirv.') ./ sqrt(sum(step.^2, 2));   % cos(Winkel), -1..1
+            if lookahead
+                % jeden Weg probeweise ablaufen (andere Kandidaten gesperrt)
+                len = zeros(size(cand, 1), 1);
+                for c = 1:size(cand, 1)
+                    vis = visited;
+                    others = setdiff(1:size(cand, 1), c);
+                    vis(sub2ind([H W], cand(others, 2), cand(others, 1))) = true;
+                    len(c) = numel(walkSkeleton(skel, vis, cand(c, 1), cand(c, 2), false));
+                end
+                [~, iBest] = max(len + 0.1 * score);   % längster Weg, bei Gleichstand geradester
+            else
+                [~, iBest] = max(score);
+            end
         else
             iBest = 1;
         end
@@ -356,4 +390,29 @@ function [xp, yp] = orderSkeletonPath(skel, x0, y0)
     end
     xp = xp(1:k);
     yp = yp(1:k);
+end
+
+
+%% Lokale Funktion: Krümmung in einem Fenster fester Länge ab der Spitze
+% Die Spitze ist der Anfang der Spline (t = breaks(1)), weil die Bogenlänge ab
+% dem Skelett-Endpunkt nächst der Ecke unten rechts gezählt wird. Die Länge wird
+% ENTLANG DER GLATTEN SPLINE gemessen (nicht über die Pixelkette, die bei
+% schrägem Draht durch die Treppe länger ist).
+% Rückgabe an Neval Punkten, gleichmäßig in Bogenlänge: Position, Krümmung [1/px],
+% Abstand von der Spitze sTip [px] und sichtbare Spline-Länge L [px].
+% Ist der sichtbare Draht kürzer als winLen, sind xs/ys/kappa NaN.
+function [xs, ys, kappa, sTip, L] = tipWindowCurvature(ppx, ppy, winLen, Neval)
+    tDense = linspace(ppx.breaks(1), ppx.breaks(end), 2000);
+    arc = [0, cumsum(hypot(diff(ppval(ppx, tDense)), diff(ppval(ppy, tDense))))];
+    L = arc(end);
+    sTip = linspace(0, winLen, Neval);   % Abstand von der Spitze [px]
+
+    if L < winLen
+        xs = nan(1, Neval);  ys = nan(1, Neval);  kappa = nan(1, Neval);
+        return
+    end
+
+    [arc, iu] = unique(arc);             % streng monoton für interp1
+    t = interp1(arc, tDense(iu), sTip);       % Kurvenparameter der Auswertepunkte
+    [xs, ys, kappa] = splineCurvature(ppx, ppy, t);
 end
