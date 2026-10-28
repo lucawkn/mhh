@@ -26,6 +26,8 @@ clear; clc; close all;
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
 nParamIter  = 3;     % Fußpunkt-Iterationen (orthogonaler Abstand Punkt <-> Spline)
 Neval       = 200;   % Auswertepunkte entlang der Spline (Darstellung + mittlere Krümmung)
+maxFitRMS   = 2;     % Fit-Qualität: mittlerer Abstand Skelettpixel <-> Spline darüber [px]
+                     % -> Frame nicht auswertbar (NaN), normal sind ~0.3-0.5 px
 
 %% 1. Select folder with default path
 defaultPath = 'M:\nascas2\Projects\MemoryCI 2.0\1 Dokumentation\AP01_Iterative Inlay-Entwicklung\AP 1.B BFR-Tests\Testergebnisse\2026-06-23-MV71-11-MV71-12';
@@ -127,18 +129,13 @@ for n = 1:ImageNummax
         if ~isempty(ex) && numel(yy) >= 2
             x0 = ex(1); y0 = ey(1);
 
-            D = bwdistgeodesic(skel, x0, y0, 'quasi-euclidean');
-            d = D(sub2ind(size(skel), yy, xx));
-
-            valid = isfinite(d);          % unerreichbare Pixel rausfiltern
-            d  = d(valid);
-            xx = xx(valid);
-            yy = yy(valid);
-
-            % unique sortiert aufsteigend UND entfernt doppelte Distanzen
-            [d, iu] = unique(d);
-            xx = xx(iu);
-            yy = yy(iu);
+            % Skelett ab (x0,y0) Pixel für Pixel in Drahtreihenfolge ablaufen
+            % (robust, wenn die Spitze den Draht berührt und eine Schleife entsteht)
+            [xx, yy] = orderSkeletonPath(skel, x0, y0);
+            d = [0; cumsum(hypot(diff(xx), diff(yy)))];   % Weglänge entlang des Skeletts [px]
+            if numel(xx) < 0.9 * numel(yy)
+                warning('Frame %d: nur %d von %d Skelettpixeln abgelaufen.', n, numel(xx), nnz(skel));
+            end
 
             if numel(d) >= 4
                 % Least-Squares-Spline durch alle Skelettpixel (Parameter = Bogenlänge)
@@ -147,6 +144,12 @@ for n = 1:ImageNummax
                 % Spline fein und gleichmäßig auswerten, Krümmung analytisch
                 s = linspace(ppx.breaks(1), ppx.breaks(end), Neval);
                 [xs, ys, kappa] = splineCurvature(ppx, ppy, s);
+
+                if fitRMS > maxFitRMS   % Spline passt nicht zum Skelett -> nicht auswerten
+                    warning('Frame %d: Spline-Fit schlecht (RMS %.1f px > %.1f px) - wird mit NaN gefüllt.', ...
+                        n, fitRMS, maxFitRMS);
+                    xs = nan(1, Neval);  ys = nan(1, Neval);  kappa = nan(1, Neval);
+                end
             else
                 warning('Frame %d: zu wenige Skelettpunkte (<4) - wird mit NaN gefüllt.', n);
             end
@@ -298,4 +301,59 @@ function dpp = ppDeriv(pp)
     [breaks, coefs, ~, order, dim] = unmkpp(pp);
     dcoefs = coefs(:, 1:order-1) .* (order-1:-1:1);
     dpp = mkpp(breaks, dcoefs, dim);
+end
+
+
+%% Lokale Funktion: Skelett ab (x0,y0) Pixel für Pixel in Drahtreihenfolge ablaufen
+% Liefert die Skelettpixel in der Reihenfolge entlang des Drahts. An
+% Verzweigungen (z.B. wenn die Spitze beim Einrollen den Draht berührt und das
+% Skelett eine Schleife bildet) wird der Nachbar gewählt, der die Richtung der
+% letzten ~8 Pixel am geradesten fortsetzt. Ersetzt das Sortieren aller
+% Skelettpixel nach geodätischer Distanz: das mischt bei einer Schleife beide
+% Seiten der Schleife (Punktsprünge bis ~200 px) und lässt den Spline-Fit und
+% die Krümmung explodieren.
+function [xp, yp] = orderSkeletonPath(skel, x0, y0)
+    [H, W] = size(skel);
+    visited = false(H, W);
+    nMax = nnz(skel);
+    xp = zeros(nMax, 1);
+    yp = zeros(nMax, 1);
+    x = x0;  y = y0;  k = 0;
+    while true
+        k = k + 1;
+        xp(k) = x;  yp(k) = y;
+        visited(y, x) = true;
+
+        % unbesuchte 8-Nachbarn im Skelett
+        cand = zeros(0, 2);
+        for dy = -1:1
+            for dx = -1:1
+                xn = x + dx;  yn = y + dy;
+                if (dx ~= 0 || dy ~= 0) && xn >= 1 && xn <= W && yn >= 1 && yn <= H ...
+                        && skel(yn, xn) && ~visited(yn, xn)
+                    cand(end+1, :) = [xn yn]; %#ok<AGROW>
+                end
+            end
+        end
+        if isempty(cand) || k == nMax
+            break
+        end
+
+        if size(cand, 1) > 1
+            % geradeste Fortsetzung der bisherigen Richtung (letzte ~8 Pixel)
+            j = max(1, k - 8);
+            dirv = [x - xp(j), y - yp(j)];
+            if all(dirv == 0)
+                dirv = cand(1, :) - [x y];
+            end
+            step  = cand - [x y];
+            score = (step * dirv.') ./ sqrt(sum(step.^2, 2));
+            [~, iBest] = max(score);
+        else
+            iBest = 1;
+        end
+        x = cand(iBest, 1);  y = cand(iBest, 2);
+    end
+    xp = xp(1:k);
+    yp = yp(1:k);
 end

@@ -96,8 +96,14 @@ dieses Skript starten.
    (nicht größte Fläche!) wird als Draht gewählt — robust gegen runde
    Luftblasen, die mehr Fläche haben können.
 6. Skelettieren (`bwskel`, `MinBranchLength=25`), Endpunkt `ex(1)` (für den
-   Mittelwert über den ganzen Draht egal), `bwdistgeodesic` für die
-   Bogenlänge, `unique(d)`. **Krümmung per Least-Squares-Spline** wie
+   Mittelwert über den ganzen Draht egal). **Reihenfolge der Skelettpixel per
+   `orderSkeletonPath`**: Skelett ab `ex(1)` pixelweise ablaufen, an
+   Verzweigungen geradeste Fortsetzung der letzten ~8 Pixel; Parameter =
+   kumulierte Weglänge. Grund: Sortieren nach `bwdistgeodesic` mischt bei einer
+   Schleife (Spitze berührt beim Einrollen den Draht → Maske verschmilzt) beide
+   Seiten der Schleife (Sprünge bis ~200 px) → fitRMS 40–60 px, mittlere
+   Krümmung bis 13× zu hoch, Spitzen im Temperatur-Plot (27–33 °C). Zusätzlich
+   `maxFitRMS = 2` px: schlechterer Fit → Frame NaN + Warnung. **Krümmung per Least-Squares-Spline** wie
    `kruemung_jinhan_v2_luca.m` (`fitSplineLSQ` durch alle Skelettpixel,
    `knotSpacing=40` px, `nParamIter=3`; `splineCurvature` analytisch an
    `Neval=200` Punkten; Funktionen identisch kopiert). Mittelwert über den
