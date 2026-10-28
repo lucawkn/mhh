@@ -93,7 +93,6 @@ showMasks = strcmp(answer, 'Anzeigen');   % Fenster geschlossen -> nicht anzeige
 ImageData = struct('name', [], 'path', [], 'rgb', [], 'bw', []);
 ImageData(ImageNummax).name = [];
 
-prevStart = [];   % Startpunkt (Länge = 0) des vorherigen Frames [x y]
 
 %% 3. Hauptschleife über alle Frames
 for n = 1:ImageNummax
@@ -163,19 +162,12 @@ for n = 1:ImageNummax
         [yy, xx] = find(skel);
 
         if ~isempty(ex) && numel(yy) >= 2
-            % Startpunkt (Länge = 0) über alle Frames konsistent wählen:
-            % erster gültiger Frame -> Endpunkt am nächsten zum Bildrand
-            % (eingespanntes Ende), danach -> Endpunkt am nächsten zum
-            % Startpunkt des vorherigen Frames (Nachverfolgen).
-            if isempty(prevStart)
-                [H, W] = size(skel);
-                distKey = min([ex-1, ey-1, W-ex, H-ey], [], 2);
-            else
-                distKey = hypot(ex - prevStart(1), ey - prevStart(2));
-            end
-            [~, iStart] = min(distKey);
+            % Startpunkt (Länge = 0) = SPITZE (freies, gekrümmtes Ende):
+            % der Skelett-Endpunkt mit dem kleinsten Abstand zur Bildecke
+            % unten rechts. Ab hier wird das Fenster windowLen_mm ausgewertet.
+            [H, W] = size(skel);
+            [~, iStart] = min(hypot(W - ex, H - ey));
             x0 = ex(iStart); y0 = ey(iStart);
-            prevStart = [x0 y0];
 
             D = bwdistgeodesic(skel, x0, y0, 'quasi-euclidean');
             d = D(sub2ind(size(skel), yy, xx));
@@ -489,9 +481,10 @@ end
 
 
 %% Lokale Funktion: Krümmung in einem Fenster fester Länge ab der Spitze
-% Die Spitze ist das Spline-Ende, das am weitesten vom Startpunkt (eingespanntes
-% Ende) entfernt ist. Die Länge wird ENTLANG DER GLATTEN SPLINE gemessen (nicht
-% über die Pixelkette, die bei schrägem Draht durch die Treppe länger ist).
+% Die Spitze ist der Anfang der Spline (t = breaks(1)), weil die Bogenlänge ab
+% dem Skelett-Endpunkt nächst der Ecke unten rechts gezählt wird. Die Länge wird
+% ENTLANG DER GLATTEN SPLINE gemessen (nicht über die Pixelkette, die bei
+% schrägem Draht durch die Treppe länger ist).
 % Rückgabe an Neval Punkten, gleichmäßig in Bogenlänge: Position, Krümmung [1/px],
 % Abstand von der Spitze sTip [px] und sichtbare Spline-Länge L [px].
 % Ist der sichtbare Draht kürzer als winLen, sind xs/ys/kappa NaN.
@@ -507,7 +500,7 @@ function [xs, ys, kappa, sTip, L] = tipWindowCurvature(ppx, ppy, winLen, Neval)
     end
 
     [arc, iu] = unique(arc);             % streng monoton für interp1
-    t = interp1(arc, tDense(iu), L - sTip);   % Kurvenparameter der Auswertepunkte
+    t = interp1(arc, tDense(iu), sTip);       % Kurvenparameter der Auswertepunkte
     [xs, ys, kappa] = splineCurvature(ppx, ppy, t);
 end
 

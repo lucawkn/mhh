@@ -178,23 +178,24 @@ Maske über Skelett, Spline-Fit und Krümmung bis zu den Plots).
 - Nach der Maskenprüfung fragt ein `questdlg` („Maskenkontrolle“), ob die
   Schwarz/Weiß-Maske jedes Frames in `figure(1)` angezeigt werden soll
   (`showMasks`; Default/Fenster schließen = nicht anzeigen → spart Zeit).
-- **Startpunkt der Bogenlänge wird nachverfolgt** (statt `ex(1)` = linkester
-  Endpunkt, der je Frame die Richtung drehen konnte): erster gültiger Frame →
-  Endpunkt am nächsten zum Bildrand (eingespanntes Ende), danach Endpunkt am
-  nächsten zu `prevStart` (Startpunkt des Vorframes). `ImageData(n).s` =
-  Bogenlänge ab Startpunkt [px].
+- **Startpunkt der Bogenlänge = Spitze**: in jedem Frame der Skelett-Endpunkt
+  mit kleinstem Abstand zur Bildecke unten rechts (`min(hypot(W-ex, H-ey))`).
+  Ersetzt die frühere Regel „randnächstes Ende im 1. Frame + Nachverfolgen“
+  (`prevStart`), die in einem Test das falsche Ende wählte.
+  `ImageData(n).s` = Abstand von der Spitze [px].
 - **`figure(4)`: Detail-Plot** der (bereinigten) mittleren Krümmung nur im
   Zeitbereich `zoomTime_s = [1.5 2.0]` s (Punkte je Frame, ersetzte Ausreißer
   als x, Inlay-Linie); Konsole: Frames im Bereich + Max mit Zeitpunkt.
 - **Auswertefenster ab der Spitze** (`tipWindowCurvature`): Spline wird über
   den ganzen sichtbaren Draht gefittet, ausgewertet aber nur `windowLen_mm =
-  13.51` mm (Bogenlänge der 6 Soll-Bögen) ab der Spitze (= Spline-Ende fern vom
-  Startpunkt). Länge über die echte Spline-Bogenlänge (dichte Auswertung,
+  13.51` mm (Bogenlänge der 6 Soll-Bögen) ab der Spitze (= Anfang der Spline,
+  da die Bogenlänge an der Spitze beginnt). Länge über die echte Spline-Bogenlänge (dichte Auswertung,
   `cumsum`), nicht über die Pixelkette (diese ist im Test 15–25 % zu lang);
   `Neval` Punkte gleichmäßig in Bogenlänge. Sichtbar < Fenster → NaN + Warnung.
   `ImageData(n).s` = Abstand von der Spitze [px]. `kappaInlay` wird automatisch
   aus der Sollform über dasselbe Fenster berechnet (`inlayWindowKappa`,
-  0.5038 1/mm bei 13.51 mm). Nur im Einzelskript; Batch/Rect noch ohne Fenster.
+  0.5038 1/mm bei 13.51 mm). Ebenso im Batch-Skript; `_rect` noch ohne Fenster
+  und mit der alten Startpunktregel.
 - **`figure(3)`: 3D-Plot κ(Länge, Zeit)** per `surf`: gemeinsame Längsachse
   `sGrid` in mm (0 … `windowLen_mm`, Abstand von der Spitze), pro Frame
   `interp1` von `kappa` (in 1/mm) auf `sGrid`, ungültige Frames → NaN (Lücke). Von oben (`view(2)`) = Heatmap.
@@ -256,6 +257,9 @@ Batch-/Excel-Logik übernommen aus dem Nutzer-Skript
   werden beschrieben; Header in W:Z der Headerzeile nur, wo leer.
 - `pxPerMm = 19.7`, Bildrate aus dem Video (`v.FrameRate`); keine Plots, keine
   RGB-Frames; `try/catch` pro Video + Zusammenfassung am Ende.
+- Pro Frame wie im Einzelskript: Spitze = Endpunkt nächst Ecke unten rechts,
+  Krümmung nur im Fenster `windowLen_mm = 13.51` ab der Spitze
+  (`tipWindowCurvature`), sichtbarer Draht < Fenster → NaN.
 - Vor Max/End/Zeitpunkt werden Ausreißerframes durch Nachbarn ersetzt
   (`replaceOutlierFrames`, gleiche Parameter und Funktion wie im Einzelskript).
 - Spline-Funktionen sind eine Kopie aus `kruemung_jinhan_v2_luca.m`

@@ -4,8 +4,10 @@
 % (SAM-2-Segmentierung) und die Kennwerte in die Testlisten-Excel schreiben.
 %
 % Krümmungsberechnung pro Frame IDENTISCH zu kruemung_jinhan_v2_luca.m:
-%   SAM-2-Maske -> bereinigen -> Skelett -> Startpunkt nachverfolgen ->
-%   Bogenlänge -> Least-Squares-Spline -> Krümmung analytisch -> Mittelwert.
+%   SAM-2-Maske -> bereinigen -> Skelett -> Spitze = Endpunkt nächst der
+%   Bildecke unten rechts -> Bogenlänge ab der Spitze -> Least-Squares-Spline
+%   -> Krümmung analytisch im Fenster windowLen_mm ab der Spitze -> Mittelwert.
+%   Frames, in denen weniger als windowLen_mm Draht sichtbar ist -> NaN.
 %   Danach werden Ausreißerframes (Fehlsegmentierung) durch ihre Nachbarn
 %   ersetzt, bevor Max/End/Zeitpunkt bestimmt werden.
 %   (Details: README_kruemung_jinhan_v2.md)
@@ -34,6 +36,9 @@ pxPerMm = 19.7;        % Kalibrierung der Videos [px/mm]
 knotSpacing = 40;    % Knotenabstand der Spline [px]: größer = glatter, kleiner = detailreicher
 nParamIter  = 3;     % Fußpunkt-Iterationen (orthogonaler Abstand Punkt <-> Spline)
 Neval       = 200;   % Auswertepunkte entlang der Spline (mittlere Krümmung)
+
+% --- Auswertefenster ab der Spitze (IDENTISCH zu kruemung_jinhan_v2_luca.m) ---
+windowLen_mm = 13.51;  % ausgewertete Länge ab der Spitze [mm] = Bogenlänge der 6 Soll-Bögen
 
 % --- Ausreißerframes durch Nachbarn ersetzen (IDENTISCH zu kruemung_jinhan_v2_luca.m) ---
 outlierWin     = 3;     % Nachbarn je Seite [Frames] (erkennt bis zu 3 Fehlframes am Stück)
@@ -140,14 +145,18 @@ for batchIdx = 1:numel(videoList)
         % --- Krümmung pro Frame (wie kruemung_jinhan_v2_luca.m) ---
         meanKappa_px = nan(ImageNummax, 1);
         fitRMS       = nan(ImageNummax, 1);
-        prevStart    = [];   % Startpunkt (Länge = 0) des vorherigen Frames [x y]
         for n = 1:ImageNummax
             maskFile = fullfile(maskDir, sprintf('frame_%05d.png', n));
             mask = imread(maskFile) > 0;   % true = Draht
-            [meanKappa_px(n), fitRMS(n), prevStart] = frameMeanCurvature(mask, prevStart, ...
-                knotSpacing, nParamIter, Neval);
+            [meanKappa_px(n), fitRMS(n), L_px] = frameMeanCurvature(mask, ...
+                knotSpacing, nParamIter, Neval, windowLen_mm * pxPerMm);
             if isnan(meanKappa_px(n))
-                warning('Frame %d: nicht auswertbar - wird mit NaN gefüllt.', n);
+                if isfinite(L_px)
+                    warning('Frame %d: sichtbare Länge %.2f mm < Fenster %.2f mm - wird mit NaN gefüllt.', ...
+                        n, L_px / pxPerMm, windowLen_mm);
+                else
+                    warning('Frame %d: nicht auswertbar - wird mit NaN gefüllt.', n);
+                end
             end
         end
 
@@ -221,12 +230,14 @@ end
 %% ==================== Lokale Funktionen ====================
 
 %% Krümmung eines Frames (Pipeline IDENTISCH zu kruemung_jinhan_v2_luca.m)
-% Rückgabe: mittlere Krümmung [1/px] (NaN = Frame nicht auswertbar),
-% RMS-Abstand Skelettpixel <-> Spline [px], aktualisierter Startpunkt.
-function [meanKappa, fitRMS, prevStart] = frameMeanCurvature(tubeFG, prevStart, ...
-        knotSpacing, nParamIter, Neval)
+% Rückgabe: mittlere Krümmung im Fenster winLen [px] ab der Spitze [1/px]
+% (NaN = Frame nicht auswertbar oder zu kurz), RMS-Abstand Skelettpixel <->
+% Spline [px], sichtbare Spline-Länge L [px] (NaN, wenn kein Spline-Fit).
+function [meanKappa, fitRMS, L] = frameMeanCurvature(tubeFG, ...
+        knotSpacing, nParamIter, Neval, winLen)
     meanKappa = NaN;
     fitRMS    = NaN;
+    L         = NaN;
 
     % Nur die größte zusammenhängende Fläche behalten
     bwLargest = false(size(tubeFG));
@@ -261,19 +272,11 @@ function [meanKappa, fitRMS, prevStart] = frameMeanCurvature(tubeFG, prevStart, 
         return
     end
 
-    % Startpunkt (Länge = 0) über alle Frames konsistent wählen:
-    % erster gültiger Frame -> Endpunkt am nächsten zum Bildrand
-    % (eingespanntes Ende), danach -> Endpunkt am nächsten zum
-    % Startpunkt des vorherigen Frames (Nachverfolgen).
-    if isempty(prevStart)
-        [H, W] = size(skel);
-        distKey = min([ex-1, ey-1, W-ex, H-ey], [], 2);
-    else
-        distKey = hypot(ex - prevStart(1), ey - prevStart(2));
-    end
-    [~, iStart] = min(distKey);
+    % Startpunkt (Länge = 0) = SPITZE (freies, gekrümmtes Ende):
+    % der Skelett-Endpunkt mit dem kleinsten Abstand zur Bildecke unten rechts.
+    [H, W] = size(skel);
+    [~, iStart] = min(hypot(W - ex, H - ey));
     x0 = ex(iStart); y0 = ey(iStart);
-    prevStart = [x0 y0];
 
     % Skelettpixel nach Bogenlänge ordnen
     D = bwdistgeodesic(skel, x0, y0, 'quasi-euclidean');
@@ -289,11 +292,10 @@ function [meanKappa, fitRMS, prevStart] = frameMeanCurvature(tubeFG, prevStart, 
         return
     end
 
-    % Least-Squares-Spline + Krümmung analytisch
+    % Least-Squares-Spline + Krümmung analytisch im Fenster ab der Spitze
     [ppx, ppy, fitRMS] = fitSplineLSQ(d, xx, yy, knotSpacing, nParamIter);
-    s = linspace(ppx.breaks(1), ppx.breaks(end), Neval);
-    [~, ~, kappa] = splineCurvature(ppx, ppy, s);
-    meanKappa = mean(kappa, 'omitnan');
+    [~, ~, kappa, ~, L] = tipWindowCurvature(ppx, ppy, winLen, Neval);
+    meanKappa = mean(kappa, 'omitnan');   % NaN, wenn sichtbarer Draht < Fenster
 end
 
 
@@ -548,6 +550,32 @@ end
 
 
 %% Spline-Funktionen (Kopie aus kruemung_jinhan_v2_luca.m - IDENTISCH halten!)
+
+%% Lokale Funktion: Krümmung in einem Fenster fester Länge ab der Spitze
+% Die Spitze ist der Anfang der Spline (t = breaks(1)), weil die Bogenlänge ab
+% dem Skelett-Endpunkt nächst der Ecke unten rechts gezählt wird. Die Länge wird
+% ENTLANG DER GLATTEN SPLINE gemessen (nicht über die Pixelkette, die bei
+% schrägem Draht durch die Treppe länger ist).
+% Rückgabe an Neval Punkten, gleichmäßig in Bogenlänge: Position, Krümmung [1/px],
+% Abstand von der Spitze sTip [px] und sichtbare Spline-Länge L [px].
+% Ist der sichtbare Draht kürzer als winLen, sind xs/ys/kappa NaN.
+function [xs, ys, kappa, sTip, L] = tipWindowCurvature(ppx, ppy, winLen, Neval)
+    tDense = linspace(ppx.breaks(1), ppx.breaks(end), 2000);
+    arc = [0, cumsum(hypot(diff(ppval(ppx, tDense)), diff(ppval(ppy, tDense))))];
+    L = arc(end);
+    sTip = linspace(0, winLen, Neval);   % Abstand von der Spitze [px]
+
+    if L < winLen
+        xs = nan(1, Neval);  ys = nan(1, Neval);  kappa = nan(1, Neval);
+        return
+    end
+
+    [arc, iu] = unique(arc);             % streng monoton für interp1
+    t = interp1(arc, tDense(iu), sTip);       % Kurvenparameter der Auswertepunkte
+    [xs, ys, kappa] = splineCurvature(ppx, ppy, t);
+end
+
+
 
 %% Lokale Funktion: kubische Least-Squares-Spline durch die Skelettpunkte
 % Parametrische Kurve S(t) = [Sx(t), Sy(t)], t = Bogenlänge [px].

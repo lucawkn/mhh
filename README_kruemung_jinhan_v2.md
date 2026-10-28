@@ -28,7 +28,7 @@ flowchart TD
     B --> C[Bereinigen<br/>bwareaopen, imclose]
     C --> D[Draht wählen<br/>größte MajorAxisLength]
     D --> E[Skelett<br/>bwskel = 1 Pixel breite Mittellinie]
-    E --> F[Startpunkt wählen<br/>Länge = 0, nachverfolgt]
+    E --> F[Spitze wählen<br/>Endpunkt nächst Ecke unten rechts = Länge 0]
     F --> G[Skelettpixel nach Bogenlänge ordnen<br/>bwdistgeodesic]
     G --> H[Least-Squares-Spline<br/>durch alle Skelettpixel]
     H --> I[Krümmung analytisch<br/>aus Spline-Ableitungen]
@@ -100,18 +100,19 @@ Das Skelett ist die **Mittellinie** des Drahts, ein Pixel breit. Kurze
 Seitenäste unter 25 px werden entfernt. Am Ende der Linie ist das Skelett etwa
 um die halbe Drahtbreite kürzer als der Draht selbst.
 
-### 3.5 Startpunkt (Länge = 0) festlegen
+### 3.5 Startpunkt (Länge = 0) = Spitze festlegen
 
 Die Endpunkte des Skeletts liefert `bwmorph(skel, 'endpoints')`. Als
-Startpunkt wählt das Skript:
+Startpunkt wählt das Skript in **jedem Frame** den Endpunkt mit dem
+**kleinsten Abstand zur Bildecke unten rechts**. Bei den Versuchsaufnahmen ist
+das immer die **Spitze**, also das freie, gekrümmte Ende.
 
-- **im ersten verwertbaren Frame** den Endpunkt mit dem kleinsten Abstand zum
-  Bildrand. Das wird als eingespanntes Ende angenommen.
-- **in jedem weiteren Frame** den Endpunkt, der dem Startpunkt des vorherigen
-  Frames am nächsten liegt (`prevStart`).
+Ab diesem Punkt wird die Bogenlänge gezählt. „Länge = 0“ liegt damit in jedem
+Frame an der Spitze, und das Auswertefenster (Abschnitt 3.8b) beginnt immer
+dort.
 
-So zeigt „Länge = 0“ über das ganze Video auf dieselbe Stelle am Draht. Das ist
-für den 3D-Plot wichtig.
+Frühere Versionen nahmen das randnächste Ende im ersten Frame und verfolgten es
+von Frame zu Frame weiter. Das hat in einem Test das falsche Ende gewählt.
 
 ### 3.6 Skelettpixel nach Bogenlänge ordnen
 
@@ -201,9 +202,8 @@ Bild ist, desto kleiner wird der Mittelwert, auch wenn sich die Spitze gleich
 stark krümmt. Damit Videos und Zeitpunkte vergleichbar sind, wertet das Skript
 deshalb **immer dieselbe Länge ab der Spitze** aus:
 
-- **Spitze** ist das Spline-Ende, das am weitesten vom Startpunkt (dem
-  eingespannten Ende, Abschnitt 3.5) entfernt ist, also das freie, gekrümmte
-  Ende.
+- **Spitze** ist der Startpunkt aus Abschnitt 3.5, also der Endpunkt nächst
+  der Ecke unten rechts. Das Fenster beginnt am Anfang der Spline.
 - **Fensterlänge:** `windowLen_mm` = 13,51 mm. Das ist die Bogenlänge der 6
   gekrümmten Abschnitte der Sollform, ohne die gerade Einlaufstrecke (siehe
   Längenausgabe von `inlayGeometry_v2.m`).
@@ -382,9 +382,11 @@ Dateien tun.
   Pixelrauschen vollständig zurück. Wählen über `fitRMS` (Abschnitt 3.7).
 - **2D-Projektion:** Die Kamera sieht nur die Bildebene. Biegt sich der Draht
   aus dieser Ebene heraus, wird die Krümmung unterschätzt.
-- **Startpunkt:** Das Skript nimmt an, dass im ersten Frame das eingespannte
-  Ende dem Bildrand am nächsten liegt und dass sich das Ende von Frame zu Frame
-  nur wenig bewegt. Das sollte man bei einem neuen Versuchsaufbau einmal prüfen.
+- **Spitze:** Das Skript nimmt an, dass die Spitze immer das Drahtende ist,
+  das der Bildecke unten rechts am nächsten liegt. Bei einem anderen
+  Versuchsaufbau, z. B. einer gedrehten Kamera, muss diese Regel angepasst
+  werden. Liegt die Spitze außerhalb des Bildes, ist das sichtbare Ende nicht die
+  echte Spitze.
 - **Maßstab:** Absolute Werte in mm und 1/mm stimmen nur mit einem korrekt
   eingetragenen `pxPerMm` für genau diese Kameraeinstellung.
 
@@ -408,7 +410,9 @@ schreibt das Skript pro Video drei Kennwerte in die Testlisten-Excel.
 4. Ist Spalte **Z** dieser Zeile schon gefüllt, wird das Video **übersprungen**,
    ohne es auszuwerten. So kann man einen abgebrochenen Lauf einfach neu
    starten.
-5. Alle Masken auswerten, **Ausreißerframes durch ihre Nachbarn ersetzen**
+5. Alle Masken auswerten, genau wie im Einzelskript: Spitze = Endpunkt nächst
+   der Ecke unten rechts, Krümmung nur im Fenster von 13,51 mm ab der Spitze,
+   zu kurze Frames werden NaN. Dann **Ausreißerframes durch ihre Nachbarn ersetzen**
    (Abschnitt 3.10, gleiche Parameter wie im Einzelskript) und daraus die
    Kennwerte bilden (siehe Tabelle). Die ersetzten Frames stehen in der
    Konsole.
