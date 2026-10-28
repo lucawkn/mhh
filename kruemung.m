@@ -222,7 +222,9 @@ drawFrame(hAx, ImageData, 1, cmap, kMin, kMax);
 function drawFrame(hAx, ImageData, n, cmap, kMin, kMax)
     n = min(max(round(n), 1), numel(ImageData));
 
-    imshow(ImageData(n).gray, 'Parent', hAx);
+    % Graustufenbild als RGB anzeigen: sonst würde es über die jet-Colormap
+    % und CLim der Krümmungsdarstellung eingefärbt (ganzes Bild blau)
+    imshow(repmat(ImageData(n).gray, [1 1 3]), 'Parent', hAx);
     hold(hAx, 'on');
 
     % Spline als eine Linie mit Farbverlauf nach Krümmung (patch-Trick:
