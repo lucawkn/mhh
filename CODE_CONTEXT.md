@@ -6,11 +6,13 @@ Code zu verlieren. Stand: 2026-07-09.
 
 Das Repository enthält die **Bildauswertungs- / Tracking-Skripte**
 (Auswertung der aufgenommenen Bilder bzw. Videos):
-- **Krümmung:** `kruemung.m` (Draht, JPG), `kruemung_hai.m` (Schlauch, AVI),
+- **Krümmung:** `kruemung.m` (Draht, JPG; Batch über mehrere Bilderordner mit
+  As/Af-CSV: `kruemung_batch.m`), `kruemung_hai.m` (Schlauch, AVI),
   `kruemung_jinhan.m` (Draht, AVI), `inlayGeometry.m` (Referenz-Krümmung des
   Inlays); Spline-Varianten `kruemung_jinhan_v2_luca.m` (+ Batch/Excel:
   `kruemung_jinhan_v2_luca_batch.m`) + `inlayGeometry_v2.m`.
-- **Tip-Tracking:** `tip_track_matching_spline.m` (JPG), `cochlea_model_tracking2.m`
+- **Tip-Tracking:** `tip_track_matching_spline.m` (JPG; Batch über mehrere
+  Bilderordner mit As/Af-CSV: `tip_track_matching_spline_batch.m`), `cochlea_model_tracking2.m`
   (MP4), `create_trajectory.m` (Referenztrajektorie).
 - **SAM-2-Segmentierung (Python):** `segment_wire_sam2.py` + `README_SAM2.md`
   (erzeugen die Drahtmasken für `kruemung.m`/`kruemung_jinhan.m`).

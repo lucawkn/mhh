@@ -137,7 +137,9 @@ python segment_wire_sam2.py
    `<videoname bzw. ordnername>_sam2_masks\frame_00001.png, ...`
    neben dem Video/Bilderordner (weiß = Draht, schwarz = Hintergrund).
 6. In MATLAB `kruemung_jinhan.m` (Video) bzw. `kruemung.m` (Bilderordner)
-   ausführen und dasselbe Video / denselben Ordner wählen.
+   ausführen und dasselbe Video / denselben Ordner wählen. Für mehrere
+   Bilderordner auf einmal: `kruemung_batch.m` ausführen und den Überordner
+   wählen (ein Plot pro Bilderordner, As/Af als CSV).
 
 **Tipp:** Ein paar PNGs aus der Mitte/dem Ende des Ordners kurz ansehen, um zu
 prüfen, dass SAM 2 den Draht über das ganze Video sauber verfolgt hat. Falls
