@@ -5,9 +5,10 @@ Aufnahmen nicht. Stattdessen segmentiert das **Segment Anything Model 2
 (SAM 2, Meta)** den Draht. Der Ablauf ist zweistufig:
 
 1. **Python**: `segment_wire_sam2.py` segmentiert ein **Video (.avi)** oder
-   einen **Bilderordner (.jpg)** einmal komplett (Auswahlfenster am Start) und
-   speichert die Masken als PNGs im Nebenordner `<name>_sam2_masks` (neben dem
-   Video bzw. neben dem Bilderordner).
+   einen **Bilderordner (.jpg)** - wahlweise auch **mehrere auf einmal** -
+   komplett (Auswahlfenster am Start) und speichert die Masken als PNGs im
+   Nebenordner `<name>_sam2_masks` (neben dem Video bzw. neben dem
+   Bilderordner).
 2. **MATLAB**: `kruemung_jinhan.m` (Video) bzw. `kruemung.m` (Bilderordner)
    lädt diese Masken und macht wie gewohnt Skelettierung + Krümmungsberechnung.
 
@@ -93,28 +94,49 @@ pip install opencv-python matplotlib numpy pillow
 
 ---
 
-## Nutzung (pro Video/Bilderordner einmal)
+## Nutzung
 
 ```powershell
 & "$env:USERPROFILE\sam2env\Scripts\Activate.ps1"
 python segment_wire_sam2.py
 ```
 
-1. Im Auswahlfenster **"Video (.avi)"** oder **"Bilderordner (.jpg)"** klicken,
-   dann im Dialog das Video bzw. den Bilderordner auswählen (startet in
-   `M:\nascas2\Students\Wöhlken\2026-07-06`).
-2. Es öffnet sich der Prompt-Frame (Standard: das 10. Bild, einstellbar über
-   `PROMPT_FRAME` oben im Skript):
+1. Im ersten Auswahlfenster **"Video (.avi)"** oder **"Bilderordner (.jpg)"**
+   klicken.
+2. Im zweiten Auswahlfenster wählen, ob **eins** oder **mehrere**
+   segmentiert werden sollen (alle Dialoge starten in
+   `M:\nascas2\Students\Wöhlken\2026-07-06`):
+   - **Ein Video / Ein Bilderordner**: das Video bzw. den Bilderordner
+     auswählen.
+   - **Mehrere Videos**: einen Ordner auswählen, der mehrere `.avi`-Dateien
+     enthält. Alle `.avi`-Dateien darin werden verarbeitet.
+   - **Mehrere Bilderordner**: einen Überordner auswählen, der mehrere
+     Bilderordner (mit `.jpg`-Bildern) enthält. Alle Unterordner mit
+     `.jpg`-Bildern werden verarbeitet (vorhandene `*_sam2_masks`-Ordner
+     werden ignoriert).
+
+   Die Reihenfolge ist jeweils alphabetisch.
+3. **Prompt-Phase:** Nacheinander öffnet sich für **jedes** Video / jeden
+   Bilderordner der Prompt-Frame (Standard: das 10. Bild, einstellbar über
+   `PROMPT_FRAME` oben im Skript). Im Fenstertitel steht, welches Video gerade
+   dran ist (z.B. `[2/5] versuch_02 - Frame 10`):
    - **Linksklick** = Punkt liegt AUF dem Draht (grünes `+`)
    - **Rechtsklick** = Punkt gehört NICHT zum Draht (rotes `x`, z.B. um
      fälschlich mitsegmentierte Bereiche auszuschließen)
    - **Taste `u`** = letzten Klick rückgängig machen
    - Nach jedem Klick wird die aktuelle Maske blau überlagert angezeigt.
-   - **Enter** = bestätigen, Propagation (vorwärts + rückwärts) startet.
-3. Warten, bis "Fertig" erscheint. Ergebnis: Ordner
+   - **Enter** = bestätigen, weiter zum nächsten Video / Bilderordner.
+   - Fenster **ohne** grünen Klick schließen = dieses Video / diesen Ordner
+     überspringen (bei "Ein Video / Ein Bilderordner": Abbruch).
+4. **Segmentier-Phase:** Erst wenn alle Prompts gesetzt sind, segmentiert
+   SAM 2 alle Videos / Bilderordner nacheinander (Maske vorwärts + rückwärts
+   ab dem Prompt-Frame) - ohne weitere Eingaben, man kann den Rechner also
+   laufen lassen. Schlägt eins fehl, wird mit dem nächsten weitergemacht.
+5. Am Ende steht eine **Zusammenfassung** (OK / FEHLER / SKIP pro Video bzw.
+   Ordner). Ergebnis jeweils: Ordner
    `<videoname bzw. ordnername>_sam2_masks\frame_00001.png, ...`
    neben dem Video/Bilderordner (weiß = Draht, schwarz = Hintergrund).
-4. In MATLAB `kruemung_jinhan.m` (Video) bzw. `kruemung.m` (Bilderordner)
+6. In MATLAB `kruemung_jinhan.m` (Video) bzw. `kruemung.m` (Bilderordner)
    ausführen und dasselbe Video / denselben Ordner wählen.
 
 **Tipp:** Ein paar PNGs aus der Mitte/dem Ende des Ordners kurz ansehen, um zu
