@@ -98,9 +98,14 @@ function out = manage_HikrobotVideo(cmd, varargin)
             if isprop(src, 'ResultingFrameRate')                % what the camera really delivers
                 fpsNominal = src.ResultingFrameRate;
             end
-            if ~isnan(fpsNominal) && exposure_us > 1e6 / fpsNominal
-                warning(['Exposure %.0f us is longer than one frame period (%.0f us): ' ...
-                         'the frame rate will drop.'], exposure_us, 1e6 / fpsNominal);
+            % If the exposure (or the USB bandwidth) does not fit into one frame
+            % period, the camera silently lowers its frame rate. ResultingFrameRate
+            % then drops below the data-sheet maximum -> warn.
+            fpsMaxDataSheet = 526.5;
+            if ~isnan(fpsNominal) && fpsNominal < 0.99 * fpsMaxDataSheet
+                warning(['Camera only reaches %.1f fps (max %.1f): exposure %.0f us too long ' ...
+                         'or USB bandwidth limited. Shorten the exposure.'], ...
+                        fpsNominal, fpsMaxDataSheet, exposure_us);
             end
             fprintf('\n  %dx%d, %.1f fps, exposure %.0f us\n', res(1), res(2), fpsNominal, exposure_us);
 
