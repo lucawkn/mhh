@@ -44,7 +44,7 @@ function out = manage_HikrobotVideo(cmd, varargin)
             pixFormat = 'BayerRG8';                % only colour format with 526.5 fps
             % Adaptor name: 'gentl' normally, 'mwgentlimaq' if the adaptor was
             % registered by hand with imaqregister(...\mwgentlimaq.dll).
-            adaptors = imaqhwinfo().InstalledAdaptors;
+            hw = imaqhwinfo; adaptors = hw.InstalledAdaptors;
             adaptor  = '';
             if any(strcmpi(adaptors, 'gentl'))
                 adaptor = 'gentl';
