@@ -91,6 +91,7 @@ function out = manage_HikrobotVideo(cmd, varargin)
             trySet(src, 'BinningHorizontal', 1);  trySet(src, 'BinningVertical', 1);
             trySet(src, 'DecimationHorizontal', 1); trySet(src, 'DecimationVertical', 1);
             trySet(src, 'DeviceLinkThroughputLimitMode', 'Off'); % no USB bandwidth cap
+            trySet(src, 'ADCBitDepth', 'Bits_8');                % 12-bit ADC caps the sensor at ~323 fps
             trySet(src, 'ExposureMode', 'Timed');
             trySet(src, 'ExposureAuto', 'Off');
             trySet(src, 'ExposureTime', exposure_us);           % microseconds
