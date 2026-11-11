@@ -42,12 +42,21 @@ function out = manage_HikrobotVideo(cmd, varargin)
             % ---- find the camera by name (enumeration order is not stable) ----
             camName   = 'MV-CS004';                % substring match, case-insensitive
             pixFormat = 'BayerRG8';                % only colour format with 526.5 fps
-            try
-                info = imaqhwinfo('gentl');
-            catch ME
-                error(['gentl adaptor not available (%s).\nInstall the "Image Acquisition ' ...
-                       'Toolbox Support Package for GenICam Interface" and Hikrobot MVS.'], ME.message);
+            % Adaptor name: 'gentl' normally, 'mwgentlimaq' if the adaptor was
+            % registered by hand with imaqregister(...\mwgentlimaq.dll).
+            adaptors = imaqhwinfo().InstalledAdaptors;
+            adaptor  = '';
+            if any(strcmpi(adaptors, 'gentl'))
+                adaptor = 'gentl';
+            elseif any(contains(adaptors, 'gentl', 'IgnoreCase', true))
+                adaptor = adaptors{find(contains(adaptors, 'gentl', 'IgnoreCase', true), 1)};
             end
+            if isempty(adaptor)
+                error(['GenTL adaptor not available. Install the "Image Acquisition Toolbox ' ...
+                       'Support Package for GenICam Interface" or register it with ' ...
+                       'imaqregister(''...\\gentl\\adaptor\\win64\\mwgentlimaq.dll'').']);
+            end
+            info = imaqhwinfo(adaptor);
             devID = []; devName = '';
             for k = 1:numel(info.DeviceIDs)
                 if contains(info.DeviceInfo(k).DeviceName, camName, 'IgnoreCase', true)
@@ -58,16 +67,16 @@ function out = manage_HikrobotVideo(cmd, varargin)
                 end
             end
             if isempty(devID)
-                error(['Hikrobot %s not found among gentl devices. Check USB3 cable, ' ...
+                error(['Hikrobot %s not found among GenTL devices. Check USB3 cable, ' ...
                        'close MVS, check imaqsupport for the MVS producer.'], camName);
             end
             if ~any(strcmpi(fmts, pixFormat))
                 error('Format %s not offered by the camera. Available: %s', ...
                       pixFormat, strjoin(fmts, ', '));
             end
-            fprintf('(using gentl DeviceID %d: %s, %s) ', devID, devName, pixFormat);
+            fprintf('(using %s DeviceID %d: %s, %s) ', adaptor, devID, devName, pixFormat);
 
-            vid = videoinput('gentl', devID, pixFormat);
+            vid = videoinput(adaptor, devID, pixFormat);
             vid.ReturnedColorSpace = 'grayscale';  % keep the raw Bayer mosaic (1 byte/pixel)
             res = vid.VideoResolution;             % max resolution 720 x 540
             vid.ROIPosition = [0 0 res];
