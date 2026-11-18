@@ -13,19 +13,19 @@ function out = manage_HikrobotVideo(cmd, varargin)
 %           one frame per pulse OFF, synced to the Arduino master timeline
 %           via per-frame timestamps (fallback: average frame rate).
 %
-% Camera settings (data sheet): 720 x 540, 526.5 fps max in BayerRG8.
-% Recording format: raw Bayer mosaic in an uncompressed 8-bit
-% 'Grayscale AVI' (~205 MB/s at full speed, about 12 GB per minute -> use an SSD).
-% Colour is restored only during 'extract' (demosaic, RGGB pattern).
-% Recording in RGB would triple the data rate, and Motion JPEG cannot be
-% encoded in real time at 526 fps.
+% Camera settings (data sheet): 720 x 540, 526.5 fps max (8-bit ADC).
+% Recording format: Mono8 (grayscale, computed in the camera) in an
+% uncompressed 8-bit 'Grayscale AVI' (~205 MB/s at full speed, about
+% 12 GB per minute -> use an SSD).
+% Colour is not recorded: with BayerRG8 the gentl adaptor converts every
+% frame to RGB (3 bytes/pixel, ~615 MB/s), which the disk cannot sustain,
+% and Motion JPEG cannot be encoded in real time at 526 fps.
 %
 % Requirements (Windows):
 %  - Hikrobot MVS installed (provides the USB3 Vision GenTL producer
 %    MvProducerU3V.cti and sets GENICAM_GENTL64_PATH)
 %  - Image Acquisition Toolbox + "Image Acquisition Toolbox Support Package
 %    for GenICam Interface" (adaptor 'gentl')
-%  - Image Processing Toolbox (demosaic) for colour frames in 'extract'
 %  - Close the MVS client before starting: only one program may open the camera.
 
     out = [];
@@ -41,7 +41,7 @@ function out = manage_HikrobotVideo(cmd, varargin)
 
             % ---- find the camera by name (enumeration order is not stable) ----
             camName   = 'MV-CS004';                % substring match, case-insensitive
-            pixFormat = 'BayerRG8';                % only colour format with 526.5 fps
+            pixFormat = 'Mono8';                   % 1 byte/pixel -> full 527 fps to disk
             % Adaptor name: 'gentl' normally, 'mwgentlimaq' if the adaptor was
             % registered by hand with imaqregister(...\mwgentlimaq.dll).
             hw = imaqhwinfo; adaptors = hw.InstalledAdaptors;
@@ -70,14 +70,17 @@ function out = manage_HikrobotVideo(cmd, varargin)
                 error(['Hikrobot %s not found among GenTL devices. Check USB3 cable, ' ...
                        'close MVS, check imaqsupport for the MVS producer.'], camName);
             end
+            aviProfile = 'Grayscale AVI';
             if ~any(strcmpi(fmts, pixFormat))
-                error('Format %s not offered by the camera. Available: %s', ...
-                      pixFormat, strjoin(fmts, ', '));
+                % fallback: colour, delivered as RGB by the adaptor (3x data rate)
+                warning(['Mono8 not offered (formats: %s). Falling back to BayerRG8 -> RGB ' ...
+                         '(~615 MB/s at full speed, frames will likely be lost).'], strjoin(fmts, ', '));
+                pixFormat  = 'BayerRG8';
+                aviProfile = 'Uncompressed AVI';
             end
             fprintf('(using %s DeviceID %d: %s, %s) ', adaptor, devID, devName, pixFormat);
 
             vid = videoinput(adaptor, devID, pixFormat);
-            vid.ReturnedColorSpace = 'grayscale';  % keep the raw Bayer mosaic (1 byte/pixel)
             res = vid.VideoResolution;             % max resolution 720 x 540
             vid.ROIPosition = [0 0 res];
             triggerconfig(vid, 'immediate');
@@ -126,14 +129,14 @@ function out = manage_HikrobotVideo(cmd, varargin)
             folderName = 'Testergebnisse';
             if ~exist(folderName, 'dir'), mkdir(folderName); end
             [~, baseName] = fileparts(finalFileName);
-            writer = VideoWriter(fullfile(folderName, [baseName '.avi']), 'Grayscale AVI');
+            writer = VideoWriter(fullfile(folderName, [baseName '.avi']), aviProfile);
             if ~isnan(fpsNominal), writer.FrameRate = fpsNominal; end   % correct playback speed
             vid.DiskLogger = writer;               % the toolbox opens and closes it
 
             ud = struct('t', zeros(0,1), ...
                         'tsFile', fullfile(folderName, [baseName '_timestamps.mat']), ...
                         'fpsNominal', fpsNominal, 'exposure_us', exposure_us, ...
-                        'pixFormat', pixFormat, 'bayerPattern', 'rggb', ...
+                        'pixFormat', pixFormat, ...
                         'deviceName', devName, 'resolution', res);
             vid.UserData = ud;
             vid.FramesAcquiredFcnCount = 100;      % ~5 short callbacks per second
@@ -186,7 +189,6 @@ function out = manage_HikrobotVideo(cmd, varargin)
                 Timestamps.FpsNominal    = ud.fpsNominal;
                 Timestamps.Exposure_us   = ud.exposure_us;
                 Timestamps.PixelFormat   = ud.pixFormat;
-                Timestamps.BayerPattern  = ud.bayerPattern;
                 Timestamps.DeviceName    = ud.deviceName;
                 Timestamps.Resolution    = ud.resolution;
                 [Timestamps.MeasuredFps, Timestamps.DroppedFrames] = ...
@@ -223,10 +225,8 @@ function out = manage_HikrobotVideo(cmd, varargin)
             % Preferred: per-frame timestamps (robust against dropped frames
             % and frame rate jitter). Fallback: average frame rate like v5.
             useTs = exist(tsFile, 'file') == 2;
-            bayerPattern = 'rggb';
             if useTs
                 S = load(tsFile, 'Timestamps'); TS = S.Timestamps;
-                bayerPattern = TS.BayerPattern;
                 % Arduino zero expressed in seconds after the first trigger
                 offsetToVideo_s = seconds(PulseLog.ZeroWallClock - TS.TriggerTime);
                 frameTimes = TS.FrameTimes_s(:);
@@ -245,10 +245,6 @@ function out = manage_HikrobotVideo(cmd, varargin)
 
             outputDir = fullfile(folderName, ['Frames_' baseName]);
             if ~exist(outputDir, 'dir'), mkdir(outputDir); end
-            canDemosaic = exist('demosaic', 'file') == 2;
-            if ~canDemosaic
-                warning('demosaic (Image Processing Toolbox) missing: saving raw Bayer frames.');
-            end
 
             tOff = PulseLog.PulseOff_s;      % one frame per pulse OFF
             for k = 1:numel(tOff)
@@ -262,8 +258,6 @@ function out = manage_HikrobotVideo(cmd, varargin)
                 targetFrame = min(max(targetFrame, 1), vObj.NumFrames);
                 try
                     img = read(vObj, targetFrame);
-                    if size(img, 3) == 3, img = img(:,:,1); end   % grayscale AVI may read as RGB
-                    if canDemosaic, img = demosaic(img, bayerPattern); end
                     imwrite(img, fullfile(outputDir, sprintf('Pulse_%02d_Off_t%.3fs.png', k, tOff(k))));
                     fprintf('  Pulse %d off @ %.3fs -> frame %d\n', k, tOff(k), targetFrame);
                 catch
