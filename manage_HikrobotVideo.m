@@ -75,8 +75,9 @@ function out = manage_HikrobotVideo(cmd, varargin)
             aviProfile = 'Grayscale AVI';
             if ~any(strcmpi(fmts, pixFormat))
                 % fallback: colour, delivered as RGB by the adaptor (3x data rate)
-                warning(['Mono8 not offered (formats: %s). Falling back to BayerRG8 -> RGB ' ...
-                         '(~615 MB/s at full speed, frames will likely be lost).'], strjoin(fmts, ', '));
+                fprintf(['Note: Mono8 not offered (formats: %s), recording BayerRG8 as RGB ' ...
+                         '(~615 MB/s; the SSD writes slower, the rest is buffered in RAM ' ...
+                         'and written after stop).\n'], strjoin(fmts, ', '));
                 pixFormat  = 'BayerRG8';
                 aviProfile = 'Uncompressed AVI';
             end
