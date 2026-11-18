@@ -3,9 +3,14 @@ function out = manage_HikrobotVideo(cmd, varargin)
 % Hikrobot MV-CS004-10UC (USB3 Vision, Sony IMX287, global shutter).
 % Same interface as manage_DinoVideo_v5:
 %
-%  init:    out = manage_HikrobotVideo('init', fileName [, exposure_us])
-%           start recording at max frame rate / full resolution,
-%           returns out.vid and out.recordStartTime
+%  init:    out = manage_HikrobotVideo('init', fileName [, exposure_us [, startNow]])
+%           configure the camera (max frame rate / full resolution) and,
+%           unless startNow = false, start recording.
+%           returns out.vid and out.recordStartTime (NaT if not started)
+%  start:   t0 = manage_HikrobotVideo('start', vid)
+%           start a recording prepared with startNow = false, returns the
+%           start time. Lets the camera run only around the pulses: at
+%           ~615 MB/s the RAM buffer cannot hold a whole experiment.
 %  save:    out = manage_HikrobotVideo('save', vid)
 %           stop recording, returns out.StopTime and out.FrameCount
 %           (+ MeasuredFps, DroppedFrames, TimestampFile)
@@ -38,6 +43,7 @@ function out = manage_HikrobotVideo(cmd, varargin)
             if numel(varargin) >= 2 && ~isempty(varargin{2})
                 exposure_us = varargin{2};
             end
+            startNow = numel(varargin) < 3 || isempty(varargin{3}) || varargin{3};
 
             imaqreset; pause(1.5);
 
@@ -148,19 +154,17 @@ function out = manage_HikrobotVideo(cmd, varargin)
             vid.FramesAcquiredFcnCount = 100;      % ~5 short callbacks per second
             vid.FramesAcquiredFcn = @(obj, ~) collectTimestamps(obj);
 
-            preview(vid); start(vid);
-            fprintf('Starting Hikrobot recording... ');
-            tStart = tic;
-            while ~islogging(vid) && toc(tStart) < 5, pause(0.05); end
-            if ~isempty(vid.InitialTriggerTime)
-                actualStartTime = datetime(vid.InitialTriggerTime);  % true acquisition start
-            else
-                actualStartTime = datetime('now');
-            end
-            if islogging(vid), fprintf('active.\n'); else, warning('Hikrobot: start timeout.'); end
-
+            preview(vid);
             out.vid = vid;
-            out.recordStartTime = actualStartTime;
+            out.recordStartTime = NaT;
+            if startNow
+                out.recordStartTime = startRecording(vid);
+            else
+                fprintf('Hikrobot ready (recording starts with ''start'').\n');
+            end
+
+        case 'start'
+            out = startRecording(varargin{1});
 
         case 'save'
             vidObj = varargin{1};
@@ -294,6 +298,20 @@ function out = manage_HikrobotVideo(cmd, varargin)
 end
 
 % ---------------------------------------------------------------------------
+function t0 = startRecording(vid)
+% Start the acquisition and return the wall-clock time of the first trigger.
+    start(vid);
+    fprintf('Starting Hikrobot recording... ');
+    tStart = tic;
+    while ~islogging(vid) && toc(tStart) < 5, pause(0.01); end
+    if ~isempty(vid.InitialTriggerTime)
+        t0 = datetime(vid.InitialTriggerTime);   % true acquisition start
+    else
+        t0 = datetime('now');
+    end
+    if islogging(vid), fprintf('active.\n'); else, warning('Hikrobot: start timeout.'); end
+end
+
 function d = LOCAL_VIDEO_DIR
 % Local folder (internal SSD) the video is recorded to.
     d = 'C:\HikrobotVideos';
