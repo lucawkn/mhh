@@ -81,7 +81,10 @@ function out = manage_HikrobotVideo(cmd, varargin)
             res = vid.VideoResolution;             % max resolution 720 x 540
             vid.ROIPosition = [0 0 res];
             triggerconfig(vid, 'immediate');
-            vid.LoggingMode       = 'memory';      % frames are written by our callback
+            % Disk logging runs inside the toolbox, outside the MATLAB main loop, so
+            % the experiment script keeps running. 'memory' is used in parallel only
+            % to read the per-frame timestamps (the frames are thrown away).
+            vid.LoggingMode       = 'disk&memory';
             vid.FramesPerTrigger  = Inf;
             vid.FrameGrabInterval = 1;             % keep every frame
 
@@ -125,16 +128,16 @@ function out = manage_HikrobotVideo(cmd, varargin)
             [~, baseName] = fileparts(finalFileName);
             writer = VideoWriter(fullfile(folderName, [baseName '.avi']), 'Grayscale AVI');
             if ~isnan(fpsNominal), writer.FrameRate = fpsNominal; end   % correct playback speed
-            open(writer);
+            vid.DiskLogger = writer;               % the toolbox opens and closes it
 
-            ud = struct('writer', writer, 'nWritten', 0, 't', zeros(0,1), ...
+            ud = struct('t', zeros(0,1), ...
                         'tsFile', fullfile(folderName, [baseName '_timestamps.mat']), ...
                         'fpsNominal', fpsNominal, 'exposure_us', exposure_us, ...
                         'pixFormat', pixFormat, 'bayerPattern', 'rggb', ...
                         'deviceName', devName, 'resolution', res);
             vid.UserData = ud;
-            vid.FramesAcquiredFcnCount = 50;       % ~10 writes per second
-            vid.FramesAcquiredFcn = @(obj, ~) writePendingFrames(obj);
+            vid.FramesAcquiredFcnCount = 100;      % ~5 short callbacks per second
+            vid.FramesAcquiredFcn = @(obj, ~) collectTimestamps(obj);
 
             preview(vid); start(vid);
             fprintf('Starting Hikrobot recording... ');
@@ -160,12 +163,22 @@ function out = manage_HikrobotVideo(cmd, varargin)
                 stopTime = datetime('now');          % wall clock at stop
                 stoppreview(vidObj);
                 vidObj.FramesAcquiredFcn = '';
-                while vidObj.FramesAvailable > 0     % write what is still in memory
-                    writePendingFrames(vidObj);
+                while vidObj.FramesAvailable > 0     % timestamps still in memory
+                    collectTimestamps(vidObj);
+                end
+                % wait until the disk logger has written every acquired frame
+                nAcq = vidObj.FramesAcquired; tWait = tic;
+                while vidObj.DiskLoggerFrameCount < nAcq && toc(tWait) < 120
+                    pause(0.2);
+                end
+                frameCount = vidObj.DiskLoggerFrameCount;
+                if frameCount < nAcq
+                    warning('Only %d of %d frames reached the AVI.', frameCount, nAcq);
                 end
                 ud = vidObj.UserData;
-                close(ud.writer);
-                frameCount = ud.nWritten;
+                if numel(ud.t) ~= frameCount
+                    warning('%d timestamps for %d frames: frame sync may be off.', numel(ud.t), frameCount);
+                end
 
                 % per-frame timestamps for exact sync in 'extract'
                 Timestamps.TriggerTime   = datetime(vidObj.InitialTriggerTime);
@@ -262,15 +275,14 @@ function out = manage_HikrobotVideo(cmd, varargin)
 end
 
 % ---------------------------------------------------------------------------
-function writePendingFrames(vid)
-% Move all frames waiting in memory into the AVI and keep their timestamps.
+function collectTimestamps(vid)
+% Take the frames out of the memory buffer (the disk logger writes them to
+% the AVI on its own) and keep only their timestamps. Keeps RAM usage flat.
     n = vid.FramesAvailable;
     if n == 0, return; end
-    [frames, t] = getdata(vid, n);           % frames: H x W x 1 x n uint8 (Bayer)
+    [~, t] = getdata(vid, n);
     ud = vid.UserData;
-    writeVideo(ud.writer, frames);
     ud.t = [ud.t; t(:)];
-    ud.nWritten = ud.nWritten + n;
     vid.UserData = ud;
 end
 
@@ -292,6 +304,17 @@ function trySet(src, name, value)
     catch ME
         if ischar(value) && any(strcmpi(value, {'True','False'}))
             try, src.(name) = strcmpi(value, 'True'); return; catch, end  %#ok<NOCOM>
+        end
+        if isnumeric(value)                  % enum feature: pick the option with that number
+            pinfo = propinfo(src, name); opts = pinfo.ConstraintValue;
+            if iscell(opts)
+                hit = opts(~cellfun(@isempty, regexp(opts, ['(^|\D)' num2str(value) '($|\D)'])));
+                if ~isempty(hit)
+                    try, src.(name) = hit{1}; return; catch, end  %#ok<NOCOM>
+                end
+                warning('Could not set %s = %g (options: %s)', name, value, strjoin(opts, ' | '));
+                return;
+            end
         end
         warning('Could not set %s: %s', name, ME.message);
     end
