@@ -20,6 +20,8 @@ function out = manage_HikrobotVideo(cmd, varargin)
 % Colour is not recorded: with BayerRG8 the gentl adaptor converts every
 % frame to RGB (3 bytes/pixel, ~615 MB/s), which the disk cannot sustain,
 % and Motion JPEG cannot be encoded in real time at 526 fps.
+% The video is recorded to a local SSD (LOCAL_VIDEO_DIR, C:\HikrobotVideos)
+% and copied to .\Testergebnisse after 'save' (network drives are too slow).
 %
 % Requirements (Windows):
 %  - Hikrobot MVS installed (provides the USB3 Vision GenTL producer
@@ -126,15 +128,18 @@ function out = manage_HikrobotVideo(cmd, varargin)
             fprintf('\n  %dx%d, %.1f fps, exposure %.0f us\n', res(1), res(2), fpsNominal, exposure_us);
 
             % ---- video file -------------------------------------------------
-            folderName = 'Testergebnisse';
-            if ~exist(folderName, 'dir'), mkdir(folderName); end
+            % Written to a LOCAL disk: the network drive (M:) only manages
+            % ~48 MB/s. 'save' copies the files to Testergebnisse afterwards.
+            localDir = LOCAL_VIDEO_DIR;
+            if ~exist(localDir, 'dir'), mkdir(localDir); end
             [~, baseName] = fileparts(finalFileName);
-            writer = VideoWriter(fullfile(folderName, [baseName '.avi']), aviProfile);
+            writer = VideoWriter(fullfile(localDir, [baseName '.avi']), aviProfile);
             if ~isnan(fpsNominal), writer.FrameRate = fpsNominal; end   % correct playback speed
             vid.DiskLogger = writer;               % the toolbox opens and closes it
 
             ud = struct('t', zeros(0,1), ...
-                        'tsFile', fullfile(folderName, [baseName '_timestamps.mat']), ...
+                        'tsFile', fullfile(localDir, [baseName '_timestamps.mat']), ...
+                        'aviFile', fullfile(localDir, [baseName '.avi']), ...
                         'fpsNominal', fpsNominal, 'exposure_us', exposure_us, ...
                         'pixFormat', pixFormat, ...
                         'deviceName', devName, 'resolution', res);
@@ -198,7 +203,22 @@ function out = manage_HikrobotVideo(cmd, varargin)
                 out.MeasuredFps   = Timestamps.MeasuredFps;
                 out.DroppedFrames = Timestamps.DroppedFrames;
                 out.TimestampFile = ud.tsFile;
+                out.LocalVideoFile = ud.aviFile;
                 delete(vidObj);
+
+                % copy video + timestamps to Testergebnisse (network drive);
+                % the local copy stays as a backup
+                folderName = 'Testergebnisse';
+                if ~exist(folderName, 'dir'), mkdir(folderName); end
+                fprintf('\n  copying to %s ... ', folderName);
+                tCopy = tic;
+                okV = copyfile(ud.aviFile, folderName);
+                okT = copyfile(ud.tsFile,  folderName);
+                if okV && okT
+                    fprintf('done (%.0f s).\n', toc(tCopy));
+                else
+                    warning('Copy to %s failed. Files are kept in %s.', folderName, LOCAL_VIDEO_DIR);
+                end
             end
             pause(1.0);
             out.StopTime   = stopTime;
@@ -210,8 +230,12 @@ function out = manage_HikrobotVideo(cmd, varargin)
             videoName = varargin{1};
             Messdata  = varargin{2};
 
+            % read from the local copy if it exists (much faster than M:),
+            % frames are always written to Testergebnisse
             folderName = 'Testergebnisse';
-            videoPath  = fullfile(folderName, videoName);
+            srcDir = LOCAL_VIDEO_DIR;
+            if ~exist(fullfile(srcDir, videoName), 'file'), srcDir = folderName; end
+            videoPath  = fullfile(srcDir, videoName);
             if ~exist(videoPath, 'file'), error('Video not found: %s', videoPath); end
             if ~isfield(Messdata, 'VideoStartTime') || ~isfield(Messdata, 'PulseLog')
                 error('Messdata missing VideoStartTime / PulseLog. Cannot sync.');
@@ -220,7 +244,7 @@ function out = manage_HikrobotVideo(cmd, varargin)
             vObj = VideoReader(videoPath);
             PulseLog = Messdata.PulseLog;
             [~, baseName] = fileparts(videoName);
-            tsFile = fullfile(folderName, [baseName '_timestamps.mat']);
+            tsFile = fullfile(srcDir, [baseName '_timestamps.mat']);
 
             % Preferred: per-frame timestamps (robust against dropped frames
             % and frame rate jitter). Fallback: average frame rate like v5.
@@ -269,6 +293,11 @@ function out = manage_HikrobotVideo(cmd, varargin)
 end
 
 % ---------------------------------------------------------------------------
+function d = LOCAL_VIDEO_DIR
+% Local folder (internal SSD) the video is recorded to.
+    d = 'C:\HikrobotVideos';
+end
+
 function collectTimestamps(vid)
 % Take the frames out of the memory buffer (the disk logger writes them to
 % the AVI on its own) and keep only their timestamps. Keeps RAM usage flat.
