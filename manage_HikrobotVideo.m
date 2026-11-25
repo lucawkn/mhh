@@ -188,7 +188,7 @@ function out = manage_HikrobotVideo(cmd, varargin)
                 while vidObj.FramesAvailable > 0     % timestamps still in memory
                     collectTimestamps(vidObj);
                 end
-                udT = vidObj.UserData.t;
+                ud0 = vidObj.UserData; udT = ud0.t;   % videoinput allows no chained indexing
                 if ~isempty(udT)                     % true end = time of the last frame
                     stopTime = datetime(vidObj.InitialTriggerTime) + seconds(udT(end));
                 end
@@ -317,7 +317,7 @@ function t0 = startRecording(vid, duration_s)
 % the timestamp callback is switched off so MATLAB is not slowed down during
 % the experiment (timestamps are collected in 'save').
     if nargin > 1 && ~isempty(duration_s)
-        fps = vid.UserData.fpsNominal;
+        ud0 = vid.UserData; fps = ud0.fpsNominal;
         if isnan(fps), fps = 527.5; end
         vid.FramesPerTrigger  = ceil(duration_s * fps);
         vid.FramesAcquiredFcn = '';
