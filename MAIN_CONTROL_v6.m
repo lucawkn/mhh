@@ -52,8 +52,8 @@ preMeas_s  = 5;                        % wait before the protocol starts
 postMeas_s = 5;                        % wait after the protocol ends
 
 % --- Camera window (Hikrobot, ~615 MB/s into RAM): records only around the pulses ---
-camPre_s  = 1;                         % camera starts this long before the protocol
-camPost_s = 1;                         % camera keeps running this long after the last pulse
+camPre_s  = 0.3;                         % camera starts this long before the protocol
+camPost_s = 0.3;                         % camera keeps running this long after the last pulse
 % -> video length = camPre_s + protocol + margin + camPost_s (fixed frame count, see 1b)
 
 % --- PicoScope ---
