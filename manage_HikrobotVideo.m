@@ -36,6 +36,8 @@ function out = manage_HikrobotVideo(cmd, varargin)
 %  - Image Acquisition Toolbox + "Image Acquisition Toolbox Support Package
 %    for GenICam Interface" (adaptor 'gentl')
 %  - Close the MVS client before starting: only one program may open the camera.
+%  - No live preview: at 527 fps it costs MATLAB main-thread time and RAM.
+%    To align / focus the camera use the MVS client (closed before recording).
 
     out = [];
     switch lower(cmd)
@@ -156,7 +158,6 @@ function out = manage_HikrobotVideo(cmd, varargin)
             vid.FramesAcquiredFcnCount = 100;      % ~5 short callbacks per second
             vid.FramesAcquiredFcn = @(obj, ~) collectTimestamps(obj);
 
-            preview(vid);
             out.vid = vid;
             out.recordStartTime = NaT;
             if startNow
@@ -183,7 +184,6 @@ function out = manage_HikrobotVideo(cmd, varargin)
                 end
                 if isrunning(vidObj), stop(vidObj); end
                 stopTime = datetime('now');          % wall clock at stop
-                stoppreview(vidObj);
                 vidObj.FramesAcquiredFcn = '';
                 while vidObj.FramesAvailable > 0     % timestamps still in memory
                     collectTimestamps(vidObj);
