@@ -37,7 +37,7 @@ PulseDurations = [30 30 30];           % ms
 Pauses         = [15 15 15];           % ms
 SetGaps        = [500 500];            % ms, NumSets-1 values
 DutyCycles     = [100 100 100];
-Voltages       = [4.0 4.0 4.0];        % one value per set
+Voltages       = [3.0 3.0 3.0];        % one value per set
 Currents       = [2 2 2];              % one value per set
 Powers         = Voltages .* Currents; % nominal only; actual power comes from the PicoScope
 
