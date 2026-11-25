@@ -7,10 +7,12 @@ function out = manage_HikrobotVideo(cmd, varargin)
 %           configure the camera (max frame rate / full resolution) and,
 %           unless startNow = false, start recording.
 %           returns out.vid and out.recordStartTime (NaT if not started)
-%  start:   t0 = manage_HikrobotVideo('start', vid)
+%  start:   t0 = manage_HikrobotVideo('start', vid [, duration_s])
 %           start a recording prepared with startNow = false, returns the
-%           start time. Lets the camera run only around the pulses: at
-%           ~615 MB/s the RAM buffer cannot hold a whole experiment.
+%           start time. With duration_s the camera itself stops after
+%           duration_s * fps frames, independent of how busy MATLAB is
+%           (at ~615 MB/s the RAM cannot hold a whole experiment).
+%           'save' then waits until this fixed-length recording is complete.
 %  save:    out = manage_HikrobotVideo('save', vid)
 %           stop recording, returns out.StopTime and out.FrameCount
 %           (+ MeasuredFps, DroppedFrames, TimestampFile)
@@ -164,7 +166,9 @@ function out = manage_HikrobotVideo(cmd, varargin)
             end
 
         case 'start'
-            out = startRecording(varargin{1});
+            duration_s = [];
+            if numel(varargin) >= 2, duration_s = varargin{2}; end
+            out = startRecording(varargin{1}, duration_s);
 
         case 'save'
             vidObj = varargin{1};
@@ -172,12 +176,21 @@ function out = manage_HikrobotVideo(cmd, varargin)
             frameCount = 0; stopTime = datetime('now');
             out.MeasuredFps = NaN; out.DroppedFrames = NaN; out.TimestampFile = '';
             if isvalid(vidObj)
+                if isfinite(vidObj.FramesPerTrigger)
+                    % fixed-length recording: let the camera finish on its own
+                    tWait = tic;
+                    while isrunning(vidObj) && toc(tWait) < 60, pause(0.05); end
+                end
                 if isrunning(vidObj), stop(vidObj); end
                 stopTime = datetime('now');          % wall clock at stop
                 stoppreview(vidObj);
                 vidObj.FramesAcquiredFcn = '';
                 while vidObj.FramesAvailable > 0     % timestamps still in memory
                     collectTimestamps(vidObj);
+                end
+                udT = vidObj.UserData.t;
+                if ~isempty(udT)                     % true end = time of the last frame
+                    stopTime = datetime(vidObj.InitialTriggerTime) + seconds(udT(end));
                 end
                 % wait until the disk logger has written every acquired frame
                 nAcq = vidObj.FramesAcquired; tWait = tic;
@@ -298,8 +311,18 @@ function out = manage_HikrobotVideo(cmd, varargin)
 end
 
 % ---------------------------------------------------------------------------
-function t0 = startRecording(vid)
+function t0 = startRecording(vid, duration_s)
 % Start the acquisition and return the wall-clock time of the first trigger.
+% With duration_s the toolbox stops by itself after a fixed frame count, and
+% the timestamp callback is switched off so MATLAB is not slowed down during
+% the experiment (timestamps are collected in 'save').
+    if nargin > 1 && ~isempty(duration_s)
+        fps = vid.UserData.fpsNominal;
+        if isnan(fps), fps = 527.5; end
+        vid.FramesPerTrigger  = ceil(duration_s * fps);
+        vid.FramesAcquiredFcn = '';
+        fprintf('Hikrobot: fixed length %.2f s (%d frames). ', duration_s, vid.FramesPerTrigger);
+    end
     start(vid);
     fprintf('Starting Hikrobot recording... ');
     tStart = tic;
@@ -320,7 +343,7 @@ end
 function collectTimestamps(vid)
 % Take the frames out of the memory buffer (the disk logger writes them to
 % the AVI on its own) and keep only their timestamps. Keeps RAM usage flat.
-    n = vid.FramesAvailable;
+    n = min(vid.FramesAvailable, 200);      % chunks keep the RAM peak small
     if n == 0, return; end
     [~, t] = getdata(vid, n);
     ud = vid.UserData;

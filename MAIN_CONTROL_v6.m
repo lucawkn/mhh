@@ -53,7 +53,8 @@ postMeas_s = 5;                        % wait after the protocol ends
 
 % --- Camera window (Hikrobot, ~615 MB/s into RAM): records only around the pulses ---
 camPre_s  = 1;                         % camera starts this long before the protocol
-camPost_s = 1;                         % camera stops this long after the protocol
+camPost_s = 1;                         % camera keeps running this long after the last pulse
+% -> video length = camPre_s + protocol + margin + camPost_s (fixed frame count, see 1b)
 
 % --- PicoScope ---
 pico.channels     = [0 1];             % 0=A, 1=B, 2=C, 3=D
@@ -81,6 +82,11 @@ act_s    = calc_ProtocolDuration_v6(runMode, prm);       % also validates the ar
 margin_s = 0.05 + 0.02 * act_s;                           % Arduino overhead, clock tolerance
 total_s  = pico.pre_s + act_s + margin_s + pico.post_s;
 fprintf('Protocol: %.3f s activation | PicoScope record: %.3f s\n', act_s, total_s);
+camDuration_s = camPre_s + act_s + margin_s + camPost_s;   % fixed video length
+if useCamera
+    fprintf('Camera: %.2f s video (%.1f s before, %.1f s after the protocol)\n', ...
+            camDuration_s, camPre_s, camPost_s);
+end
 
 if runMode == "pwm" && any(Pauses(PulseCounts > 1) <= 3)
     warning('PWM pauses <= 3 ms cannot be separated from PWM off-phases in the analysis.');
@@ -189,9 +195,12 @@ try
         drawnow;
         pause(0.05);
     end
-    if useCamera                       % camera runs only from here on
-        vidStruct.recordStartTime = manage_HikrobotVideo('start', vidStruct.vid);
-        while toc(tPhase1) < preMeas_s, pause(0.01); end
+    if useCamera                       % camera runs only from here on, for camDuration_s
+        vidStruct.recordStartTime = manage_HikrobotVideo('start', vidStruct.vid, camDuration_s);
+        % send the protocol camPre_s after the REAL camera start (start() itself takes time)
+        while toc(tPhase1) < preMeas_s || datetime('now') < vidStruct.recordStartTime + seconds(camPre_s)
+            pause(0.005);
+        end
     end
     fprintf('Phase 1 done after %.1f s.\n', toc(tPhase1));
 
@@ -236,9 +245,8 @@ try
     % --- Phase 3: Post-measurement ---
     fprintf('Phase 3/3: Post-measurement (%d s)\n', postMeas_s);
     tPhase3 = tic;
-    if useCamera                       % stop the camera camPost_s after the protocol
-        while toc(tPhase3) < camPost_s, pause(0.01); end
-        sv = manage_HikrobotVideo('save', vidStruct.vid);   % stop, write to C:, copy to M:
+    if useCamera                       % camera stops by itself after camDuration_s;
+        sv = manage_HikrobotVideo('save', vidStruct.vid);   % wait, write to C:, copy to M:
     end
     while toc(tPhase3) < postMeas_s
         pause(0.1);
